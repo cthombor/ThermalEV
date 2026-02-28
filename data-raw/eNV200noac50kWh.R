@@ -29,33 +29,47 @@ library(usethis)
 library(xts)
 library(janitor)
 
-filnm_list = list.files(here::here("data_raw/eNV200noac50kWh/"))
+filnm_list = list.files(here::here("data-raw/eNV200noac50kWh/"))
 tbl_list = vector("list", length(filnm_list))
 
 for (i in seq(length(filnm_list))) {
-  browser()
-  #todo: modify code (if necessary) to allow users to add a csv file
-  #to a subdirectory of data-raw/ and then re-run.  The column names may
-  #not be an exact match, if LeafSpy settings have been modified.
   tbl <- read_csv(
-    here::here("data_raw/eNV200noac50kWh", filnm_list[i]),
-    name_repair = "unique_quiet",
-    col_types =
-      cols(`Date/Time` =
-             col_datetime("%d/%m/%Y %H:%M:%S"))
+    here::here("data-raw/eNV200noac50kWh", filnm_list[i]),
+    n_max = 1,
+    # read headers
+    show_col_types = FALSE,
+    name_repair = "unique_quiet"
   )
-  tbl <- tbl |>
-    select(!starts_with("Debug")) |>
-    #n.b. there may be multiple Debug cols in LeafSpy logs
-    select(!VIN) |>
-    #n.b. publishing a vin is hazardous, because it's sometimes used as a
-    #self-authenticating ("security by obscurity") identifier.
-    janitor::clean_names()
+  if ("VIN" %in% names(tbl)) {
+    # this csv file has not yet been modified for privacy-preservation, for
+    # ease-of-use in the tidyverse, and for mitigation of the Excel-editing
+    # hazard to the precision of its datestamps and geolocation.
+    tbl <- read_csv(
+      here::here("data-raw/eNV200noac50kWh", filnm_list[i]),
+      name_repair = "unique_quiet",
+      col_types =
+        cols(`Date/Time` =
+               col_datetime("%d/%m/%Y %H:%M:%S"))
+    )
+    tbl <- tbl |>
+      select(!starts_with("Debug")) |>
+      #n.b. there may be multiple Debug cols in LeafSpy logs
+      select(!VIN) |>
+      #n.b. publishing a vin is hazardous, because it's sometimes used as a
+      #self-authenticating ("security by obscurity") identifier.
+      janitor::clean_names()
 
-  #write to /data-raw, to mitigate privacy and precision-loss hazards
-  write.csv(tbl, here::here("data_raw/eNV200noac50kWh", filnm_list[i]))
+    #write to /data-raw
+    write_csv(tbl, here::here("data-raw/eNV200noac50kWh", filnm_list[i]))
 
-  #compute delta_t for runs of near-consecutive samples
+  } else {
+    # this csv file has already been modified for use in this package
+    tbl <- read_csv(here::here("data-raw/eNV200noac50kWh", filnm_list[i]),
+                    show_col_types = FALSE)
+  }
+
+  # perform transforms which aren't dependent on our modelling parameters,
+  # as an optimisation for repeated evaluations in nlm()
   tbl <- tbl |>
     mutate(delta_t = date_time - lag(date_time))
 
@@ -86,9 +100,16 @@ for (i in seq(length(filnm_list))) {
              (pack_avg_temp - lag(pack_avg_temp)) / delta_t,
            .before = cp1)
 
-  tbl_list[i] <- tbl
+  tbl_list[[i]] <- tbl
 }
 
+# this clumsiness avoids the quadratic-time behaviour of R's runtime when
+# $n$ elements are individually appended to a list.  In a naive coding,
+# the $i$-th element is copied a total of $n-i+1$ times.
 eNV200noac50kWh <- dplyr::bind_rows(tbl_list)
+
+# warning: any update to LeafSpy may cause it to produce logfiles with a
+# different set of column names, so some additional data-tidying may be
+# required.
 
 usethis::use_data(eNV200noac50kWh, overwrite = TRUE)
