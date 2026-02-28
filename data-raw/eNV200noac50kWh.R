@@ -1,26 +1,24 @@
 ## concatenate csv files in data-raw/eNV200noac50kWh/ to create
-## data/eNV200noac50kWh.csv
+## data/eNV200noac50kWh.rda
 
-# warning: this script modifies csv files, deleting any "vin" column to
-# maintain the security-by-obscurity defense against malicious use of this
-# identifier.
+# warning: this script modifies csv files in data-raw/eNV200noac50kWh/, deleting
+# any "VIN" column to maintain the security-by-obscurity defense against
+# malicious use of this identifier.
 
 # warning: this script interprets the entries in the Date/Time column of
-# a csv file as "%d/%m/%Y %H:%M:%S", rewriting these as timestamps in
-# in POSIXct format ("%Y-%m-$d %H:%M:%S) in a date_time column.
+# the csv files as "%d/%m/%Y %H:%M:%S", rewriting these as timestamps in
+# in POSIXct format ("%Y-%m-$d %H:%M:%S) in a date_time column.  This filewrite
+# avoids the hazard of anyone using Excel to edit a csv file in data-raw/.
+# See leafspy.com/wp-content/uploads/2024/04/LeafSpy-Help-1.5.0.pdf for
+# a discussion of the precision-loss hazard when Excel writes a csv file.
 
-# warning: this script muntifies the column-headers in csv files,
+# warning: this script renames the column-headers in csv files,
 # so that they're fully acceptable as column names in the tidyverse.
+# In particular, Date/Time is transmogrified into date_time.
 
 # warning: this script deletes any Debug columns in the csv files.  V1.5.0
 # of LeafSpy for Android has two such columns.  Duplicate column names
 # are second-class entities in the tidyverse.
-
-# n.b. it is dangerous to use Excel to edit a csv file from LeafSpy,
-# because precision is lost from timestamps and lat/long information
-# when they are truncated when writing a csv file from Excel -- unless you
-# defang this default "feature" of Excel.  See
-# leafspy.com/wp-content/uploads/2024/04/LeafSpy-Help-1.5.0.pdf
 
 # Run once, when adding this dataset to the package:
 # usethis::use_data_raw("eNV200noac50kWh")
@@ -31,14 +29,16 @@ library(usethis)
 library(xts)
 library(janitor)
 
-cdir <- getwd()
-setwd(paste0(cdir, "/data-raw/eNV200noac50kWh"))
+filnm_list = list.files(here::here("data_raw/eNV200noac50kWh/"))
+tbl_list = vector("list", length(filnm_list))
 
-file_list = list.files()
-
-for (i in seq(length(file_list))) {
+for (i in seq(length(filnm_list))) {
+  browser()
+  #todo: modify code (if necessary) to allow users to add a csv file
+  #to a subdirectory of data-raw/ and then re-run.  The column names may
+  #not be an exact match, if LeafSpy settings have been modified.
   tbl <- read_csv(
-    file_list[1],
+    here::here("data_raw/eNV200noac50kWh", filnm_list[i]),
     name_repair = "unique_quiet",
     col_types =
       cols(`Date/Time` =
@@ -46,65 +46,49 @@ for (i in seq(length(file_list))) {
   )
   tbl <- tbl |>
     select(!starts_with("Debug")) |>
-    select(!vin) |>
+    #n.b. there may be multiple Debug cols in LeafSpy logs
+    select(!VIN) |>
+    #n.b. publishing a vin is hazardous, because it's sometimes used as a
+    #self-authenticating ("security by obscurity") identifier.
     janitor::clean_names()
-  #n.b. there may be multiple Debug cols in LeafSpy logs
-  #n.b. publishing a vin is hazardous, because it's sometimes used as a
-  #self-authenticating ("security by obscurity") identifier.
 
-  write.csv(tbl, file_list[1])
+  #write to /data-raw, to mitigate privacy and precision-loss hazards
+  write.csv(tbl, here::here("data_raw/eNV200noac50kWh", filnm_list[i]))
 
+  #compute delta_t for runs of near-consecutive samples
+  tbl <- tbl |>
+    mutate(delta_t = date_time - lag(date_time))
 
+  sampling_interval <- as.double(median(tbl$delta_t, na.rm = TRUE))
+  # multiple missing samples will terminate a predictive segment
+  # isolated missing samples do not hugely affect our model's predictions
+  # time-stamps in the logs have a precision of 1 second
+  max_delta_t <- 2 * sampling_interval + 2
+  tbl <- tbl |>
+    mutate(delta_t = ifelse(delta_t > max_delta_t, NA, delta_t))
+
+  # charging power (in kW)
+  tbl <- tbl |>
+    mutate(charging_kW = obc_out_pwr / 1000.0, .before = cp1)
+
+  # annoyingly, pack_t3_c is uniformly NA in all my logfiles
+  tbl <- tbl |>
+    mutate(pack_avg_temp = rowMeans(across(c(
+      pack_t1_c, pack_t2_c, pack_t4_c
+    ))), .before = cp1)
+
+  # rate of heat gain (in K/s), a very noisy but unbiased estimate.
+  # n.b. there's no advantage in using a higher-order estimate, because
+  # our model is an exponential smoothing and then a numeric integration
+  # (cumsum) of these noisy deltas.
+  tbl <- tbl |>
+    mutate(delta_K_delta_t =
+             (pack_avg_temp - lag(pack_avg_temp)) / delta_t,
+           .before = cp1)
+
+  tbl_list[i] <- tbl
 }
 
-
+eNV200noac50kWh <- dplyr::bind_rows(tbl_list)
 
 usethis::use_data(eNV200noac50kWh, overwrite = TRUE)
-
-
-
-
-#initiate a blank data frame, each iteration of the loop will append the data from the given file to this variable
-dataset <- data.frame()
-
-#had to specify columns to get rid of the total column
-for (i in 1:length(file_list)){
-  temp_data <- read_excel(file_list[i], range = cell_cols("A:H")) #each file will be read in, specify which columns you need read in to avoid any errors
-  temp_data$Class <- sapply(strsplit(gsub(".xlsx", "", file_list[i]), "_"), function(x){x[2]}) #clean the data as needed, in this case I am creating a new column that indicates which file each row of data came from
-  dataset <- rbind(dataset, temp_data) #for each iteration, bind the new data to the building dataset
-}
-
-# also from https://rpubs.com/LMunyan/363306:
-require(data.table)
-
-#create a list of the files from your target directory
-file_list <- list.files(path="C:/Users/Luke/Documents/NBA_Leaders")
-
-#initiate a blank data frame, each iteration of the loop will append the data from the given file to this variable
-dataset <- data.frame()
-
-#had to specify columns to get rid of the total column
-for (i in 1:length(file_list)){
-  temp_data <- fread(file_list[i], stringsAsFactors = F) #read in files using the fread function from the data.table package
-  dataset <- rbindlist(list(dataset, temp_data), use.names = T) #for each iteration, bind the new data to the building dataset
-}
-
-# from https://rpubs.com/jimhester/rbind
-
-f2 <- function(days) {
-  results <- vector("list", length(days))
-  i <- 1
-  for (d in days) {
-    # Get data
-    day_data <- get_data(d)
-
-    # Process data
-    # ...
-
-    # Store data
-    results[[i]] <- day_data
-    i <- i + 1
-  }
-  as.data.frame(dplyr::bind_rows(results))
-}
-
