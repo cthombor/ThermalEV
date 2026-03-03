@@ -20,8 +20,8 @@
 #' @export
 #'
 #' @examples
-#' tm <- predict_temp(new_thmodel()) # uses data-raw/log26Jan26.csv
-#' tm <- predict_temp(tm, effective_pack_resistance = 3.9)
+#' m <- predict_temp(new_thmodel()) # uses data-raw/log26Jan26.csv
+#' m <- m |> predict_temp(effective_pack_resistance = 5)
 
 predict_temp <- function(tmodel = NULL,
                          effective_pack_resistance = 4.,

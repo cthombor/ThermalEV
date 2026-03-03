@@ -27,9 +27,9 @@ plot_fit <- function(m)
          main = paste0(m$name,
                       ": r = ",
                       format((m$parameters)[[1]], digits = 3),
-                      " Ω, λ_1 = ",
+                      " Ω, λ1 = ",
                       format((m$parameters)[[2]], digits = 3),
-                      " s, λ_2 = ",
+                      " s, λ2 = ",
                       format((m$parameters)[[3]]/3600, digits = 3),
                       " h")
     )
