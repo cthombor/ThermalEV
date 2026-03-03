@@ -1,4 +1,15 @@
-# q for Hadley
+# q for Hadley: is there an efficient way to do recursive filtering in the
+# tidyverse?  I suspect not, as it'd be clumsy and still not be very general.
+# Columns must be converted to vectors, and then you'd do an unvectorisable
+# per-element tail-recursion within each group. Easiest to do this by lurching
+# into xts... unless the recursive filter is outside the scope of what xts can
+# handle i.e. a time-series of dim-1 samples, not a timeseries on samples from
+# multiple channels, and not a time series with irregular or missing samples.
+
+# Maybe it's best to do all signal processing in Matlab, and to push its results
+# into the tidyverse only if you want to do some non-trivial statistical
+# analysis?  Too late for me now!  I'm pretty sure the limitations of recursive
+# filtering in xts won't severely cripple my modelling.
 
 install.packages("reprex")
 library(reprex)

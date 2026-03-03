@@ -33,6 +33,7 @@ filnm_list = list.files(here::here("data-raw/eNV200noac50kWh/"))
 tbl_list = vector("list", length(filnm_list))
 
 for (i in seq(length(filnm_list))) {
+  #todo: rewrite to use munge_logfile(), and to write a thmodel to data/
   tbl <- read_csv(
     here::here("data-raw/eNV200noac50kWh", filnm_list[i]),
     n_max = 1,

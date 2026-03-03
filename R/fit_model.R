@@ -5,6 +5,12 @@
 library(tidyverse)
 library(xts)
 
+# workaround for lack of metadata in a logtibble
+global_fit <<- NULL # updated on each call to fit_model()
+global_filnm <<- NULL # updated on each call to munge_logfile()
+global_fildir <<- NULL # updated on each call to munge_logfile()
+global_logtibble <<- NULL # updated on each call to predict_temp()
+
 #' @param pack_r
 #'
 #' @param lambda_to_pack
@@ -12,11 +18,13 @@ library(xts)
 #' @param logfil
 #' @param lambda_to_ambient
 #'
-#' @returns list from nlm()
+#' @returns list from nlm(), describing its best-fit
 #' @export
 #'
 #' @examples
-fit_model <- function(logfil = "26Jan26",
+#' fit_model()
+
+fit_model <- function(logfil = "log26Jan26",
                       pack_r = 4,
                       lambda_to_pack = 60,
                       lambda_to_ambient = 10000)
@@ -31,24 +39,26 @@ fit_model <- function(logfil = "26Jan26",
       )
     ))
   }
+browser()
+  if (is.null(global_logtibble) || (global_filnm != logfil)) {
+    # prime the pump! initialise global_logtibble from logfil
+    predict_temp(
+      logfilnm = logfil,
+      effective_pack_resistance = pack_r,
+      lambda_cell_to_pack = lambda_to_pack,
+      lambda_pack_to_ambient = lambda_to_ambient
+    )
+  }
 
-  # prime the pump! initialise global_logtibble from logfil
-  predict_temp(
-    logfile = logfil,
-    effective_pack_resistance = pack_r,
-    lambda_cell_to_pack = lambda_to_pack,
-    lambda_pack_to_ambient = lambda_to_ambient
-  )
   fit <- nlm(
     fm,
     p = c(pack_r, lambda_to_pack, lambda_to_ambient),
     print.level = 1
   )
-  #todo: confirm that nlm()'s last run of predict_temp() is its best fit, i.e.
-  #that it's safe to rely on global_logtibble for details of this fit
-
-  #todo: rewrite fit_model() to call predict_temp() using nlm()'s fitted
-  #parameters, and incorporate this logtibble in a tidied-up result from nlm()
+  #n.b. we assume global_logtibble contains the details of this fit, but
+  #it'd be safer to re-run fit_model on the best-fit parameters then
+  #return an object in a bespoke logtibble class which contains a tidied-up
+  #result from nlm()
 
   global_fit <<- fit
   return(fit)
