@@ -81,6 +81,10 @@ predict_temp <- function(tmodel = NULL,
     logtibble <- logtibble |>
       mutate(charging_kW = obc_out_pwr / 1000.0, .before = cp1)
 
+    # pack power (in kW)
+    logtibble <- logtibble |>
+      mutate(pack_kW = pack_volts * abs(pack_amps) / 1000.0, .before = cp1)
+
     #munge soc to a percentage, for ease of plotting and by convention
     logtibble <- logtibble |> mutate (soc = soc / 10000)
 
