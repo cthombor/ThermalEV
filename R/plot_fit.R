@@ -3,9 +3,10 @@
 library(tidyverse)
 library(xts)
 
-
-
-#' Plot pack temp, predicted pack temp, and ambient temp
+#' Plot pack temp, predicted pack temp, ambient temp, pack kW
+#'
+#' Not working yet -- pack kW should be on a separate panel, or smoothed
+#' so that it's not so intrusive
 #'
 #' #todo: dispatch through generic plot()
 #'
@@ -20,10 +21,12 @@ library(xts)
 plot_fit <- function(m)
 {
   m$logdata |>
-    select(date_time, pack_avg_temp, pred_pack_avg_temp, ambient) |>
+    select(date_time, pack_avg_temp, pred_pack_avg_temp, ambient, pack_kW) |>
     as.xts() |>
-    plot(legend.loc = "right",
+    plot(legend.loc = "top",
          main.timespan = FALSE,
+ #        multi.panel = 3,
+ #        y.axis = same,
          main = paste0(m$name,
                       ": r = ",
                       format((m$parameters)[[1]], digits = 3),
