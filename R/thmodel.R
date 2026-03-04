@@ -23,17 +23,17 @@ new_thmodel <- function() {
       # provenance relative to a user-varying path, no trailing "/"
       modified.first.time = now(), # named as in xts
       modified.last.time = now(),
-      logdata = tibble(0),
-      # if logdata has more than one column, then this must be a log from
-      # LeafSpy as munged by munge_logfile, with additional columns
-      # from thmodel.predict_temp() on the parameters
       parameters = list(NA),
       # if first element !is.NA, logdata must have the predicted temps; if the
       # first element of fit !is.NA, then these parameters must be a best-fit,
       # as found by nlm().
       #todo: refine this class to record any non-default values for nlm() params
-      fit = list(NA)
+      fit = list(NA),
       # if the first element !is.NA, this must be the result of an nlm()
+      logdata = tibble(0)
+      # if logdata has more than one column, then this must be a log from
+      # LeafSpy as munged by munge_logfile, with additional columns
+      # from thmodel.predict_temp() on the parameters
     )
   return(m)
 }

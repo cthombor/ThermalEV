@@ -31,6 +31,7 @@ predict_temp <- function(tmodel = NULL,
                          logfilnm = "log26Jan2026",
                          logfildir = "data-raw") {
 
+
   if (!nzchar(logfilnm) && is.null(tmodel)) {
     stop("Aborting. Please specify the name of a LeafSpy logfile.")
   }
@@ -218,7 +219,6 @@ predict_temp <- function(tmodel = NULL,
                     lambda_pack_to_ambient = lambda_pack_to_ambient,
                     heat_capacity = heat_capacity)
   m$modified.last.time <- now()
-
   return(m)
 
 }
