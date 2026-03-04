@@ -129,11 +129,12 @@ predict_temp <- function(tmodel = NULL,
   # recursive filter; but R's runtime is hostile to recursion.  It's possible to
   # use sapply() to implement a reasonably-efficient tail-recursion, but its
   # correctness relies on an undocumented expectation of sapply: that it
-  # performs a sequential in-order execution of its FUN which starts at the
-  # first element of its input vector(s). See
-  # stackoverflow.com/questions/49348870/tibbletime-previous-days-close/
-  # 49373709#comment140995212_49373709 and
-  # github.com/tidyverse/dbplyr/issues/1108
+  # performs a sequential, in-order execution of its FUN, and not a vectorised
+  # implementation (which would read all of its inputs fully, rather than
+  # stalling the computation of the second element of its output until the
+  # computation of its first element has completed) See stackoverflow.com/
+  # questions/49348870/tibbletime-previous-days-close/49373709#
+  # comment140995212_49373709 and github.com/tidyverse/dbplyr/issues/1108
 
   # predicted delta-heating of pack (in K), with exponential lag, grouped
   # by the gaps in the sampling
