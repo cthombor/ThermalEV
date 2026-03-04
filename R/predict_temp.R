@@ -127,12 +127,12 @@ predict_temp <- function(tmodel = NULL,
 
   # we now lurch from the tidyverse into the wilds of xts. The EMA is a simple
   # recursive filter; but R's runtime is hostile to recursion.  It's possible to
-  # use sapply() to implement a tail-recursion, but writing an explicit
-  # conditional to handle the base case adds complexity to the code, and its
+  # use sapply() to implement a reasonably-efficient tail-recursion, but its
   # correctness relies on an undocumented expectation of sapply: that it
   # performs a sequential in-order execution of its FUN which starts at the
-  # first element of a vector. See stackoverflow.com/questions/49348870/
-  # tibbletime-previous-days-close/49373709#comment140995212_49373709 and
+  # first element of its input vector(s). See
+  # stackoverflow.com/questions/49348870/tibbletime-previous-days-close/
+  # 49373709#comment140995212_49373709 and
   # github.com/tidyverse/dbplyr/issues/1108
 
   # predicted delta-heating of pack (in K), with exponential lag, grouped
@@ -180,7 +180,8 @@ predict_temp <- function(tmodel = NULL,
   # the front of the vehicle.
   ambient_xts <- as.xts(logtibble$ambient, logtibble$date_time)
   EMA_parameter_pack_to_ambient <- sampling_interval / lambda_pack_to_ambient
-  lagged_heat <- as.xts(vector(mode = "double", length = length(unlagged_heat)), logtibble$date_time)
+  lagged_heat <- as.xts(vector(mode = "double", length = length(unlagged_heat)),
+                        logtibble$date_time)
   for (i in seq(length(w))) {
     # compute a lagged time-series of pack-to-ambient temperature differentials.
     # These are proportional to heats in J, with the constant of proportionality
@@ -192,8 +193,7 @@ predict_temp <- function(tmodel = NULL,
     starting_temp <- as.double(pack_avg_temp_xts[w[i]])
     lagged_heat[(wend[i] + 1):(wend[i + 1] - 1)] <-
       stats::filter(
-        lagged_heat[(wend[i] + 1):(wend[i + 1] - 1)] +
-          (ambient_xts[(wend[i] + 1):(wend[i + 1] - 1)] -
+         (ambient_xts[(wend[i] + 1):(wend[i + 1] - 1)] -
              pred_pack_avg_temp_xts[(wend[i] + 1):(wend[i + 1] - 1)]) *
           EMA_parameter_pack_to_ambient,
         1. - EMA_parameter_pack_to_ambient,
@@ -202,16 +202,6 @@ predict_temp <- function(tmodel = NULL,
       )
   }
   pred_pack_avg_temp_xts <- pred_pack_avg_temp_xts + lagged_heat
-
-  # n.b. the computation above does not model a second-order effect: diffusion
-  # of the lagged_heat to the ambient.  This could be handled with a slightly
-  # more complex recursive filter, but I can't see how to implement this within
-  # the constraints of stats::filter(). R's runtime is poorly suited to
-  # recursion over long vectors -- so we'd either have to be very tolerant of a
-  # long runtime, or drop into another language at this point.
-
-  #todo: estimate the magnitude of the second-order effect, using a third
-  # EMA via stats::filter()
 
   # return to the tidyverse!  Hooray!!
   logtibble <- logtibble |>
