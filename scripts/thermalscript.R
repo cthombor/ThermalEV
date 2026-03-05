@@ -1,12 +1,12 @@
 # hacking with xts plots, notes on heat capacity, fiddles with Sys.timezone()
 
 # 96 cells in the pack, 2.13 kg/cell
-# water (4.13 J/Kg) in the electrolyte puts an upper-bound on cell heat capacity
+# water (4.13 J/gK) in the electrolyte puts an upper-bound on cell heat capacity
 pack_heat_capacity <- 96 * 2.13 * 1000 * 4.13
 # the heat capacity of the 100kg of the non-cell pack contents is
-# not quite negligible... but steel is only 0.5 J/Kg
+# not quite negligible... but steel is only 0.5 J/gK
 pack_heat_capacity_from_steel <- 100 * 1000 * 0.5
-# polyethylene is 2.0 J/Kg, everything other than water is lower than this
+# polyethylene is 2.0 J/gK, everything other than water is lower than this
 pack_heat_capacity_upper_bound <- pack_heat_capacity +
   pack_heat_capacity_from_steel * 2.0 / 0.5
 

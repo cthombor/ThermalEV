@@ -10,18 +10,19 @@ library(xts)
 #' @param packr
 #' @param lambda1
 #' @param lambda2
+#' @param print.level
 #'
 #' @returns list from nlm(), describing its best-fit
 #' @export
 #'
 #' @examples
-#' m <- fit_model(munge_logfile())
-
+#' m <- fit_model(print.level = 2)
 
 fit_model <- function(m = NULL,
                       packr = 4,
                       lambda1 = 60,
-                      lambda2 = 10000) {
+                      lambda2 = 10000,
+                      print.level = 1) {
 
   fm <- function(x = c(packr, lambda1, lambda2)) {
     m <- predict_temp(
@@ -33,9 +34,11 @@ fit_model <- function(m = NULL,
     return(MSE_of_fit(m))
   }
 
+  if (is.null(m)) m <- munge_logfile()  # use our default logfile
+
   m$fit <- nlm(fm,
                p = c(packr, lambda1, lambda2),
-               print.level = 1)
+               print.level = print.level)
 
   # evaluate predict_temp() one last time, on the best fit
   m <- predict_temp(

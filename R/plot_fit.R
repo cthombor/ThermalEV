@@ -29,11 +29,11 @@ plot_fit <- function(m)
  #        y.axis = same,
          main = paste0(m$name,
                       ": r = ",
-                      format((m$parameters)[[1]], digits = 3),
-                      " Ω, λ1 = ",
+                      format((m$parameters)[[1]] * 1000, digits = 3),
+                      " mΩ, λ1 = ",
                       format((m$parameters)[[2]], digits = 3),
                       " s, λ2 = ",
-                      format((m$parameters)[[3]]/3600, digits = 3),
+                      format((m$parameters)[[3]] / 3600, digits = 3),
                       " h")
     )
 }

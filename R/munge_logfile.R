@@ -14,17 +14,13 @@ library(janitor)
 #' @export
 #'
 #' @examples
-#' munge_logfile()
+#' m <- munge_logfile()
 
 munge_logfile <- function(logfildir = "data-raw",
-                          logfilnm = "log26Jan2026") {
-  if (logfildir == "data") {
-    # load an rda file
-    rdafilpath <- paste0(here::here(logfildir), "/", logfilnm, ".rda")
-    m <- load(rdafilpath)
-  } else {
+                          logfilnm = "log26Jan2026.csv") {
+
     # read a csv file, create a new thmodel object, possibly write a munged csv
-    logfilpath <- paste0(here::here(logfildir), "/", logfilnm, ".csv")
+    logfilpath <- paste0(here::here(logfildir), "/", logfilnm)
 
     # read headers to determine if it's already munged
     tbl <- read_csv(
@@ -77,7 +73,7 @@ munge_logfile <- function(logfildir = "data-raw",
     }
 
     m <- new_thmodel()
-    m$name <- logfilnm
+    m$name <- str_sub(logfilnm, 1, (nchar(logfilnm) - 4)) # strip extension
     m$filnm <- logfilnm
     m$fildir <- logfildir
     m$logdata <- tbl
@@ -86,8 +82,6 @@ munge_logfile <- function(logfildir = "data-raw",
     #csv from data-raw/. Downside: the user must specify "data" as the logfildir
     #in future, to benefit from this optimisation. Downside: this might cause
     #confusion about versioning of thmodel objects and csv files.
-
-  }
 
   return(m)
 }

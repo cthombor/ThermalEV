@@ -8,48 +8,42 @@
 #' which has a tibble-translation of the orginal LeafSpy csv with additional
 #' columns for the predictions of the model and for convenience when plotting.
 #'
-#' @param tmodel, a thmodel
-#' @param effective_pack_resistance, a primary factor (in Ohms)
-#' @param lambda_cell_to_pack, a primary factor (in seconds)
-#' @param lambda_pack_to_ambient, a primary factor (in seconds)
-#' @param heat_capacity, a secondary factor (in J/K)
-#' @param logfilnm, optional parameter, required when tmodel == NULL
-#' @param logfildir, optional parameter
+#' @param tmodel
+#' @param effective_pack_resistance
+#' @param lambda_cell_to_pack
+#' @param lambda_pack_to_ambient
+#' @param heat_capacity
+#' @param min_segment_length
+#' @param logfilnm
+#' @param logfildir
 #'
 #' @returns a thmodel
 #' @export
 #'
 #' @examples
-#' m <- predict_temp(new_thmodel()) # uses data-raw/log26Jan26.csv
-#' m <- m |> predict_temp(effective_pack_resistance = 5)
+#' m <- predict_temp() # uses data-raw/log26Jan26.csv
+#' m <- m |> predict_temp(effective_pack_resistance = 0.5)
 
 predict_temp <- function(tmodel = NULL,
-                         effective_pack_resistance = 4.,
+                         effective_pack_resistance = 0.4,
                          lambda_cell_to_pack = 1.0e2,
                          lambda_pack_to_ambient = 1.0e4,
                          heat_capacity = 1.0e6,
-                         logfilnm = "log26Jan2026",
+                         min_segment_length = 50,
+                         logfilnm = "log26Jan2026.csv",
                          logfildir = "data-raw") {
-
 
   if (!nzchar(logfilnm) && is.null(tmodel)) {
     stop("Aborting. Please specify the name of a LeafSpy logfile.")
   }
   else {
-    if (!is.null(tmodel)) {
-      m <- tmodel
-    } else {
-      m <- new_thmodel()
-    }
-    if ((m$filnm != logfilnm) || (m$fildir != logfildir)) {
-      # read a different logfile, and munge it (if isn't already munged)
+    m <- tmodel
+    if (is.null(m) || m$name == "") {
       m <- munge_logfile(logfilnm = logfilnm, logfildir = logfildir)
     }
   } # endif (!nzchar(logfile))
 
   logtibble <- m$logdata
-
-
 
   if (!"delta_t" %in% names(logtibble)) {
     # avoid recomputing these columns
@@ -97,21 +91,10 @@ predict_temp <- function(tmodel = NULL,
   logtibble <- logtibble |>
     mutate(
       pred_Joule_heating =
-        pack_amps * pack_amps * effective_pack_resistance,
+        pack_amps * pack_amps *
+        effective_pack_resistance,
       .before = cp1
     )
-
-  # unlagged predicted per-sample delta-heating of pack (in temperature K),
-  # based on our roughly-estimated heat_capacity. If this parameter is
-  # modified, then the best-fit value of effective_pack_resistance is affected
-  # (precisely in inverse proportion), since it is the ratio between these two
-  # parameters which is the constant of proporationality between the square of
-  # pack amperage and its "Joule heating" in units of K/s.
-
-  logtibble <- logtibble |>
-    mutate(pred_heating_unlagged =
-             pred_Joule_heating / heat_capacity,
-           .before = cp1)
 
   # we now recompute the sampling_interval with more precision, by using the
   # mean rather than the median as we had done when defining segments in the
@@ -119,6 +102,19 @@ predict_temp <- function(tmodel = NULL,
   # intervals between segments, and is likely is at a higher precision than the
   # 1-second resolution of timestamps as recorded in the logfile)
   sampling_interval <- as.double(mean(logtibble$delta_t, na.rm = TRUE))
+
+  # unlagged predicted per-sample delta-heating of pack (in temperature K),
+  # based on our roughly-estimated heat_capacity. If this parameter is
+  # modified, then the best-fit value of effective_pack_resistance is affected
+  # (precisely in inverse proportion), since it is the ratio between these two
+  # parameters which is the constant of proportionality between the square of
+  # pack amperage and its "Joule heating" in units of K/s.
+  logtibble <- logtibble |>
+    mutate(
+      pred_heating_unlagged =
+        pred_Joule_heating / heat_capacity * sampling_interval,
+      .before = cp1
+    )
 
   # we use an Exponential Moving Average filter on a per-sample basis: rather
   # inaccurate when there are missing samples; but can be efficiently computed
@@ -140,18 +136,21 @@ predict_temp <- function(tmodel = NULL,
   # predicted delta-heating of pack (in K), with exponential lag, grouped
   # by the gaps in the sampling
   w <- which(is.na(logtibble$delta_t))
+  nsegments <- length(w)
+  wstart <- w
+  wend <- lead(w) - 1
+  wend[nsegments] <- length(logtibble$delta_t)
+  wexclude <- (wend - wstart) < min_segment_length
+
   unlagged_heat <- as.xts(logtibble$pred_heating_unlagged, logtibble$date_time)
   lagged_heat <- as.xts(vector(mode = "double",
                                length = length(unlagged_heat)),
                         logtibble$date_time)
-  wend <- c(w, length(unlagged_heat) + 1) # append a 0-length "ghost segment"
 
-  for (i in seq(length(w))) {
-    # apply the EMA iteratively, over all non-ghost segments
-    lagged_heat[wend[i]:(wend[i + 1] - 1)] <-
+  for (i in seq(nsegments)[which(!wexclude)]) {
+    lagged_heat[wstart[i]:wend[i]] <-
       stats::filter(
-        unlagged_heat[wend[i]:(wend[i + 1] - 1)] *
-          EMA_parameter_cell_to_pack,
+        unlagged_heat[wstart[i]:wend[i]] * EMA_parameter_cell_to_pack,
         1. - EMA_parameter_cell_to_pack,
         method = "recursive",
         init = 0.
@@ -162,16 +161,15 @@ predict_temp <- function(tmodel = NULL,
     xts(logtibble$pack_avg_temp, logtibble$date_time)
 
   # predict pack temps from cumsum of lagged delta-heat in each segment
-  segment_starts <- logtibble$date_time[w]
+  segment_starts <- logtibble$date_time[wstart]
   pred_pack_avg_temp_xts <- lag(lagged_heat)
   # n.b. the first point in each segment is an observation, not a prediction
-  pred_pack_avg_temp_xts[segment_starts] <- NA
+  pred_pack_avg_temp_xts[segment_starts] <-
+    as.double(pack_avg_temp_xts[segment_starts])
 
-  for (i in seq(length(w))) {
-    starting_temp <- as.double(pack_avg_temp_xts[w[i]])
-    pred_pack_avg_temp_xts[(wend[i] + 1):(wend[i + 1] - 1)] <-
-      cumsum(pred_pack_avg_temp_xts[(wend[i] + 1):(wend[i + 1] - 1)]) +
-      starting_temp
+  for (i in seq(nsegments)[which(!wexclude)]) {
+    pred_pack_avg_temp_xts[wstart[i]:wend[i]] <-
+      cumsum(pred_pack_avg_temp_xts[wstart[i]:wend[i]])
   }
 
   # we now apply a second exponential filter, with a much longer time
@@ -184,26 +182,29 @@ predict_temp <- function(tmodel = NULL,
   EMA_parameter_pack_to_ambient <- sampling_interval / lambda_pack_to_ambient
   lagged_heat <- as.xts(vector(mode = "double", length = length(unlagged_heat)),
                         logtibble$date_time)
-  for (i in seq(length(w))) {
+  for (i in seq(nsegments)[which(!wexclude)]) {
     # compute a lagged time-series of pack-to-ambient temperature differentials.
     # These are proportional to heats in J, with the constant of proportionality
     # being the heat capacity of the pack excluding the modules and their
-    # contents.  If the high-amp cabling to the modules is heating significantly,
-    # this wattage will be lumped with the Joule heating of the cells, and the
-    # time-constant of its decay will be lumped with the (short) time-constant
-    # of the modules' thermosensor coming into equilibrium with its cells.
-    starting_temp <- as.double(pack_avg_temp_xts[w[i]])
-    lagged_heat[(wend[i] + 1):(wend[i + 1] - 1)] <-
+    # contents.  If the high-amp cabling to the modules is heating
+    # significantly, this wattage will be lumped with the Joule heating of the
+    # cells, and the time-constant of its decay will be lumped with the (short)
+    # time-constant of the modules' thermosensor coming into equilibrium with
+    # its cells.
+    starting_temp <- as.double(pack_avg_temp_xts[wstart[i]])
+    lagged_heat[wstart[i]:wend[i]] <-
       stats::filter(
-         (ambient_xts[(wend[i] + 1):(wend[i + 1] - 1)] -
-             pred_pack_avg_temp_xts[(wend[i] + 1):(wend[i + 1] - 1)]) *
+        (ambient_xts[wstart[i]:wend[i]] -
+           pred_pack_avg_temp_xts[wstart[i]:wend[i]]) *
           EMA_parameter_pack_to_ambient,
         1. - EMA_parameter_pack_to_ambient,
         method = "recursive",
-        init = starting_temp - ambient_xts[wend[i]]
+        init = starting_temp - ambient_xts[wstart[i]]
       )
   }
   pred_pack_avg_temp_xts <- pred_pack_avg_temp_xts + lagged_heat
+
+  pred_pack_avg_temp_xts[segment_starts] <- NA # these aren't predictions
 
   # return to the tidyverse!  Hooray!!
   logtibble <- logtibble |>
