@@ -2,43 +2,62 @@
 % Please edit documentation in R/predict_temp.R
 \name{predict_temp}
 \alias{predict_temp}
-\title{Predict pack temperatures using a simple thermal model and data from
-a LeafSpy logfile.}
+\title{Uses a 3-parameter thermal model to predict temperatures in a LeafSpy log}
 \usage{
 predict_temp(
-  effective_pack_resistance = 4,
-  lambda_cell_to_pack = 60,
-  lambda_pack_to_ambient = NULL,
-  cell_heat_capacity = 1e+07,
-  pack_heat_capacity = NULL,
-  logfile = NULL,
-  logtibble = NULL
+  tmodel = NULL,
+  effective_pack_resistance = 0.4,
+  lambda_cell_to_pack = 100,
+  lambda_pack_to_ambient = 300,
+  heat_capacity = 1e+06,
+  min_segment_length = 50,
+  logfilnm = "log26Jan2026.csv",
+  logfildir = "data-raw"
 )
 }
 \arguments{
-\item{effective_pack_resistance}{in Ohms}
+\item{tmodel}{a thmodel, optional}
 
-\item{lambda_cell_to_pack}{time constant, in seconds}
+\item{effective_pack_resistance}{in Ohms, a primary parameter}
 
-\item{lambda_pack_to_ambient}{time constant, in seconds}
+\item{lambda_cell_to_pack}{in seconds, a primary parameter}
 
-\item{cell_heat_capacity}{in J/gK, total over all modules in pack}
+\item{lambda_pack_to_ambient}{in seconds, a primary parameter}
 
-\item{pack_heat_capacity}{in J/gK, of pack excluding modules and cells}
+\item{heat_capacity}{in J/K, a secondary parameter}
 
-\item{logfile}{name of logfile (in .csv format)}
+\item{min_segment_length}{shorter sequences of samples are ignored}
 
-\item{logtibble}{required input, if logfile == "".  Superassignment
-to a global tibble with this name, if logfile <> ""}
+\item{logfilnm}{name of a csv logfile to be read, if is.null(tmodel)}
+
+\item{logfildir}{directory in which the logfile is located}
 }
 \value{
-xts with columns pack_avg_temp, pred_pack_avg_temp, soc,
-  pack_amps, charging_kW, pack_kW
+a thmodel
 }
 \description{
-Predict pack temperatures using a simple thermal model and data from
-a LeafSpy logfile.
+A LeafSpy logfile may be specified to this function by filename and
+directory, in which case this logfile is munged -- to mitigate the privacy
+risk of publishing a VIN, and to revise column names so that they're tidy. In
+normal use, the logfile is specified to predict_temp() by a thmodel object
+-- which has metadata describing its provenance and the values of the
+modelling parameters, and which has a tibble-translation of the orginal
+LeafSpy csv with additional columns for the predictions of the model and for
+convenience when plotting.
+}
+\details{
+Notes on heat capacity:
+
+The 96 cells in my aftermarket 50kWh pack weigh 2.13 kg apiece, so there's a
+total of roughly 200kg of water (at 4.13 J/gK) in the electrolyte.  There'll
+be some additional heat content in the 100kg of non-cell contents in the
+pack. Polyethylene is 2.0 J/gK, steel is 0.5 J/gK, everything else is less.
+As a round number, the heat content of the pack is thus 1.0e6.  This is a
+secondary parameter in our modelling because the Joule heating (in K) of a
+pack is the square of its amperage, multiplied by its effective resistance
+and divided by its heat capacity (in J/K).
 }
 \examples{
-predict_temp()
+m <- predict_temp() # uses data-raw/log26Jan26.csv
+m <- m |> predict_temp(effective_pack_resistance = 0.5)
 }

@@ -7,8 +7,8 @@ library(janitor)
 #' and has tidied column names.  Side effect: updates this csv file.  Returns
 #' a thmodel with this csv as its logdata, and with provenance fields set.
 #'
-#' @param logfildir
-#' @param logfilnm
+#' @param logfildir directory of csv logfile to be interpreted as a thmodel
+#' @param logfilnm  name of logfile to be interpreted
 #'
 #' @returns thmodel
 #' @export

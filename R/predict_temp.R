@@ -1,21 +1,33 @@
 #' Uses a 3-parameter thermal model to predict temperatures in a LeafSpy log
 #'
-#' A LeafSpy logfile may be specified by filename and directory, in which case
-#' this logfile is munged -- to mitigate the privacy risk of publishing a VIN,
-#' and to revise column names so that they're tidy.  In normal use, the logfile
-#' is specified to predict_temp() by a thmodel object -- which has metadata
-#' describing its provenance and the values of the modelling parameters, and
-#' which has a tibble-translation of the orginal LeafSpy csv with additional
-#' columns for the predictions of the model and for convenience when plotting.
+#' A LeafSpy logfile may be specified to this function by filename and
+#' directory, in which case this logfile is munged -- to mitigate the privacy
+#' risk of publishing a VIN, and to revise column names so that they're tidy. In
+#' normal use, the logfile is specified to predict_temp() by a thmodel object
+#' -- which has metadata describing its provenance and the values of the
+#' modelling parameters, and which has a tibble-translation of the orginal
+#' LeafSpy csv with additional columns for the predictions of the model and for
+#' convenience when plotting.
 #'
-#' @param tmodel
-#' @param effective_pack_resistance
-#' @param lambda_cell_to_pack
-#' @param lambda_pack_to_ambient
-#' @param heat_capacity
-#' @param min_segment_length
-#' @param logfilnm
-#' @param logfildir
+#' Notes on heat capacity:
+#'
+#' The 96 cells in my aftermarket 50kWh pack weigh 2.13 kg apiece, so there's a
+#' total of roughly 200kg of water (at 4.13 J/gK) in the electrolyte.  There'll
+#' be some additional heat content in the 100kg of non-cell contents in the
+#' pack. Polyethylene is 2.0 J/gK, steel is 0.5 J/gK, everything else is less.
+#' As a round number, the heat content of the pack is thus 1.0e6.  This is a
+#' secondary parameter in our modelling because the Joule heating (in K) of a
+#' pack is the square of its amperage, multiplied by its effective resistance
+#' and divided by its heat capacity (in J/K).
+#'
+#' @param tmodel a thmodel, optional
+#' @param effective_pack_resistance in Ohms, a primary parameter
+#' @param lambda_cell_to_pack in seconds, a primary parameter
+#' @param lambda_pack_to_ambient in seconds, a primary parameter
+#' @param heat_capacity in J/K, a secondary parameter
+#' @param min_segment_length shorter sequences of samples are ignored
+#' @param logfilnm name of a csv logfile to be read, if is.null(tmodel)
+#' @param logfildir directory in which the logfile is located
 #'
 #' @returns a thmodel
 #' @export
@@ -27,11 +39,17 @@
 predict_temp <- function(tmodel = NULL,
                          effective_pack_resistance = 0.4,
                          lambda_cell_to_pack = 1.0e2,
-                         lambda_pack_to_ambient = 1.0e4,
+                         lambda_pack_to_ambient = 300,
                          heat_capacity = 1.0e6,
                          min_segment_length = 50,
                          logfilnm = "log26Jan2026.csv",
                          logfildir = "data-raw") {
+
+  #todo: ? rescale model parameters for consistency with plot_fit()
+
+  #todo: ? remove default values for model parameters, so that the ones
+  # in a non-null tmodel are used unless the user explicitly specifies a
+  # change
 
   if (!nzchar(logfilnm) && is.null(tmodel)) {
     stop("Aborting. Please specify the name of a LeafSpy logfile.")
@@ -163,55 +181,64 @@ predict_temp <- function(tmodel = NULL,
   # predict pack temps from cumsum of lagged delta-heat in each segment
   segment_starts <- logtibble$date_time[wstart]
   pred_pack_avg_temp_xts <- lag(lagged_heat)
-  # n.b. the first point in each segment is an observation, not a prediction
-  pred_pack_avg_temp_xts[segment_starts] <-
-    as.double(pack_avg_temp_xts[segment_starts])
 
+  pred_pack_avg_temp_xts[wstart] <- pack_avg_temp_xts[wstart] # observations
   for (i in seq(nsegments)[which(!wexclude)]) {
     pred_pack_avg_temp_xts[wstart[i]:wend[i]] <-
-      cumsum(pred_pack_avg_temp_xts[wstart[i]:wend[i]])
+      cumsum(pred_pack_avg_temp_xts[wstart[i]:wend[i]]) # predictions
   }
 
-  # we now apply a second exponential filter, with a much longer time
-  # constant, to (very roughly) model the cooling of the pack by its
-  # convection and conduction to the ambient air (and also to the
-  # vehicle's frame, which is assumed to be in thermal equilibrium
-  # with the ambient temperature as measured by a thermosensor at
-  # the front of the vehicle.
-  ambient_xts <- as.xts(logtibble$ambient, logtibble$date_time)
+  # we now revert to base R, in order to apply a recursive filter which is
+  # outside the scope of stats::filter().
+  #
+  # This filter also has an exponential decay.  It is a first-order model of the
+  # cooling of the pack by its convection to the ambient air (and also by some
+  # conduction to the vehicle's frame -- which is assumed to be in thermal
+  # equilibrium with the ambient temperature as measured by a thermosensor at
+  # the front of the vehicle).
+  #
+  # TODO: adjust the time constant so that it decreases with the vehicle's
+  # velocity.  Possibly it'll be adequate to multiply the time constant by
+  # the vehicle's velocity divided by a fitted parameter (200 km/h, initially)
+
+  # The computational kernel of this filter could be executed quite efficiently
+  # on any superscalar CPU.  To gain this efficiency, it'd be necessary to
+  # express it in a language (C, Fortran, Java, ...) which offers an optimising
+  # compiler. This filter could not be calculated efficiently on any vector
+  # supercomputer or on any GPU, because the updated prediction for the previous
+  # timestep is an input to the prediction of the current timestep. It might be
+  # interesting to compare per-element runtimes of this unvectorisable filter in
+  # various implementations of various interpreted languages (R, Python,
+  # unjitted Java, ...), on various CPUs.
+  ambient_v <- logtibble$ambient
+  pred_temp_v <- as.vector(pred_pack_avg_temp_xts[,1,drop=TRUE])
+  old_pred_v <- pred_temp_v
   EMA_parameter_pack_to_ambient <- sampling_interval / lambda_pack_to_ambient
-  lagged_heat <- as.xts(vector(mode = "double", length = length(unlagged_heat)),
-                        logtibble$date_time)
   for (i in seq(nsegments)[which(!wexclude)]) {
-    # compute a lagged time-series of pack-to-ambient temperature differentials.
-    # These are proportional to heats in J, with the constant of proportionality
-    # being the heat capacity of the pack excluding the modules and their
-    # contents.  If the high-amp cabling to the modules is heating
-    # significantly, this wattage will be lumped with the Joule heating of the
-    # cells, and the time-constant of its decay will be lumped with the (short)
-    # time-constant of the modules' thermosensor coming into equilibrium with
-    # its cells.
-    starting_temp <- as.double(pack_avg_temp_xts[wstart[i]])
-    lagged_heat[wstart[i]:wend[i]] <-
-      stats::filter(
-        (ambient_xts[wstart[i]:wend[i]] -
-           pred_pack_avg_temp_xts[wstart[i]:wend[i]]) *
-          EMA_parameter_pack_to_ambient,
-        1. - EMA_parameter_pack_to_ambient,
-        method = "recursive",
-        init = starting_temp - ambient_xts[wstart[i]]
-      )
+    # It might be interesting to benchmark R's Tailcall() against the following
+    # "manual" TCO of a simple recursive filter.  See
+    # stackoverflow.com/questions/78979492/optimization-of-tail-recursion-in-r
+    prev_newpred <- pred_temp_v[wstart[i]] # base case
+    prev_oldpred <- prev_newpred
+    for (j in seq(wstart[i] + 1, wend[i])) {
+      curr_oldpred <- old_pred_v[j]
+      # new delta-temp is the old delta-temp plus a small shift toward ambient
+      curr_newpred <- prev_newpred +
+        (curr_oldpred - prev_oldpred) +
+        (ambient_v[j] - prev_newpred) * EMA_parameter_pack_to_ambient
+      pred_temp_v[j] <- curr_newpred
+      prev_oldpred <- curr_oldpred
+      prev_newpred <- curr_newpred
+    }
   }
-  pred_pack_avg_temp_xts <- pred_pack_avg_temp_xts + lagged_heat
 
-  pred_pack_avg_temp_xts[segment_starts] <- NA # these aren't predictions
+  pred_temp_v[wstart] <- NA # these are not predictions
 
   # return to the tidyverse!  Hooray!!
   logtibble <- logtibble |>
-    mutate(pred_pack_avg_temp = as.vector(pred_pack_avg_temp_xts),
+    mutate(pred_pack_avg_temp = pred_temp_v,
            .before = "cp1") |>
     select(!c(pred_Joule_heating, pred_heating_unlagged))
-
   m$logdata <- logtibble
   m$filnm <- logfilnm
   m$fildir <- logfildir

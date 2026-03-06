@@ -4,24 +4,24 @@
 library(tidyverse)
 library(xts)
 
-#' @param pack_r
+#' fit_model: uses nlm() to find a best-fit, with MSE criterion
 #'
-#' @param m
-#' @param packr
-#' @param lambda1
-#' @param lambda2
-#' @param print.level
+#' @param m a thmodel
+#'
+#' @param packr starting value of effective resistance, in Ohms
+#' @param lambda1 starting value of the cell-to-module time constant, in seconds
+#' @param lambda2 starting value of the module-to-ambient time constant, in sec
+#' @param print.level 0 for quiet, 1 for start and endpoints, 2 for verbose
 #'
 #' @returns list from nlm(), describing its best-fit
 #' @export
 #'
 #' @examples
 #' m <- fit_model(print.level = 2)
-
 fit_model <- function(m = NULL,
                       packr = 4,
-                      lambda1 = 60,
-                      lambda2 = 10000,
+                      lambda1 = 100,
+                      lambda2 = 300,
                       print.level = 1) {
 
   fm <- function(x = c(packr, lambda1, lambda2)) {
@@ -59,6 +59,7 @@ fit_model <- function(m = NULL,
 #' @export
 #'
 #' @examples
+#' MSE_of_fit(predict_temp())
 MSE_of_fit <- function(m) {
   t1 <- mutate(m$logdata,
                pred_error = pack_avg_temp - pred_pack_avg_temp,

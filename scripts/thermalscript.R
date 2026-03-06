@@ -1,4 +1,4 @@
-# hacking with xts plots, notes on heat capacity, fiddles with Sys.timezone()
+# notes on heat capacity, hacks and fiddles
 
 # 96 cells in the pack, 2.13 kg/cell
 # water (4.13 J/gK) in the electrolyte puts an upper-bound on cell heat capacity
@@ -45,4 +45,41 @@ fit_tbl <- global_logtibble |>
          pack_avg_temp,
          pred_pack_avg_temp,
          charging_kW)
+
+#hacking with filters
+
+  # we now apply a second exponential filter, with a much longer time
+  # constant, to (very roughly) model the cooling of the pack by its
+  # convection and conduction to the ambient air (and also to the
+  # vehicle's frame, which is assumed to be in thermal equilibrium
+  # with the ambient temperature as measured by a thermosensor at
+  # the front of the vehicle.
+  ambient_xts <- as.xts(logtibble$ambient, logtibble$date_time)
+  EMA_parameter_pack_to_ambient <- sampling_interval / lambda_pack_to_ambient
+  lagged_heat <- as.xts(vector(mode = "double", length = length(unlagged_heat)),
+                        logtibble$date_time)
+  for (i in seq(nsegments)[which(!wexclude)]) {
+    # compute a lagged time-series of pack-to-ambient temperature differentials.
+    # These are proportional to heats in J, with the constant of proportionality
+    # being the heat capacity of the pack excluding the modules and their
+    # contents.  If the high-amp cabling to the modules is heating
+    # significantly, this wattage will be lumped with the Joule heating of the
+    # cells, and the time-constant of its decay will be lumped with the (short)
+    # time-constant of the modules' thermosensor coming into equilibrium with
+    # its cells.
+    starting_temp <- as.double(pack_avg_temp_xts[wstart[i]])
+    lagged_heat[wstart[i]:wend[i]] <-
+      stats::filter(
+        (ambient_xts[wstart[i]:wend[i]] -
+           pred_pack_avg_temp_xts[wstart[i]:wend[i]]) *
+          EMA_parameter_pack_to_ambient,
+        1. - EMA_parameter_pack_to_ambient,
+        method = "recursive",
+        init = starting_temp - ambient_xts[wstart[i]]
+      )
+  }
+  pred_pack_avg_temp_xts <- pred_pack_avg_temp_xts + lagged_heat
+
+  pred_pack_avg_temp_xts[segment_starts] <- NA # these aren't predictions
+
 

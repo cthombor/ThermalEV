@@ -21,19 +21,28 @@ library(xts)
 plot_fit <- function(m)
 {
   m$logdata |>
-    select(date_time, pack_avg_temp, pred_pack_avg_temp, ambient, pack_kW) |>
+    select(date_time,
+           pack_avg_temp,
+           pred_pack_avg_temp,
+           ambient,
+           pack_kW) |>
     as.xts() |>
-    plot(legend.loc = "top",
-         main.timespan = FALSE,
- #        multi.panel = 3,
- #        y.axis = same,
-         main = paste0(m$name,
-                      ": r = ",
-                      format((m$parameters)[[1]] * 1000, digits = 3),
-                      " mΩ, λ1 = ",
-                      format((m$parameters)[[2]], digits = 3),
-                      " s, λ2 = ",
-                      format((m$parameters)[[3]] / 3600, digits = 3),
-                      " h")
+    plot(
+      legend.loc = "top",
+      main.timespan = FALSE,
+      #        multi.panel = 3,
+      #        y.axis = same,
+      main = paste0(
+        m$name,
+        ": r = ",
+        format((m$parameters)[[1]] * 1000, digits = 3),
+        " mΩ, λ1 = ",
+        format((m$parameters)[[2]], digits = 3),
+        " s, λ2 = ",
+        format((m$parameters)[[3]] / 3600, digits = 3),
+        " h"
+      )
     )
+
+  invisible(1)
 }
