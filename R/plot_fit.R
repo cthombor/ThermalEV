@@ -12,7 +12,7 @@ library(xts)
 #'
 #' @param m
 #'
-#' @returns
+#' @returns 1
 #' @export
 #'
 #' @examples
@@ -20,13 +20,18 @@ library(xts)
 #' plot_fit(fit_model())
 plot_fit <- function(m)
 {
-  m$logdata |>
+  browser()
+  pd <- m$logdata |>
+    mutate(
+      smoothed_kW = smooth.spline(pack_kW)$y
+    ) |>
     select(date_time,
            pack_avg_temp,
            pred_pack_avg_temp,
            ambient,
-           pack_kW) |>
-    as.xts() |>
+           smoothed_kW) |>
+    as.xts()
+  pd |>
     plot(
       legend.loc = "top",
       main.timespan = FALSE,
@@ -43,6 +48,4 @@ plot_fit <- function(m)
         " h"
       )
     )
-
-  invisible(1)
 }

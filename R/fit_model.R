@@ -1,6 +1,3 @@
-#' fit_model, runs nlm() on predict_temp to minimise Rsq.
-#'
-
 library(tidyverse)
 library(xts)
 
@@ -13,7 +10,7 @@ library(xts)
 #' @param lambda2 starting value of the module-to-ambient time constant, in sec
 #' @param print.level 0 for quiet, 1 for start and endpoints, 2 for verbose
 #'
-#' @returns list from nlm(), describing its best-fit
+#' @returns list retval from nlm(), describing its best-fit
 #' @export
 #'
 #' @examples
@@ -24,6 +21,17 @@ fit_model <- function(m = NULL,
                       lambda2 = 300,
                       print.level = 1) {
 
+#' fm: interface to predict_temp(), for use by nlm()
+#'
+#' Side effect: updates thmodel `m` in the calling environment
+#'
+#' @param x parameter list
+#'
+#' @returns MSE of the fit
+#' @export
+#'
+#' @examples
+#' fm(c(1,100,1000))
   fm <- function(x = c(packr, lambda1, lambda2)) {
     m <- predict_temp(
       m,

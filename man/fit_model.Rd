@@ -16,13 +16,22 @@ fit_model(m = NULL, packr = 4, lambda1 = 100, lambda2 = 300, print.level = 1)
 \item{lambda2}{starting value of the module-to-ambient time constant, in sec}
 
 \item{print.level}{0 for quiet, 1 for start and endpoints, 2 for verbose}
+
+\item{x}{parameter list}
 }
 \value{
-list from nlm(), describing its best-fit
+list retval from nlm(), describing its best-fit
+
+MSE of the fit
 }
 \description{
 fit_model: uses nlm() to find a best-fit, with MSE criterion
 }
 \examples{
 m <- fit_model(print.level = 2)
+fm: interface to predict_temp(), for use by nlm()
+
+Side effect: updates thmodel `m` in the calling environment
+
+fm(c(1,100,1000))
 }

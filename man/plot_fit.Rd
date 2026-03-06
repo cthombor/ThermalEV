@@ -9,6 +9,9 @@ plot_fit(m)
 \arguments{
 \item{m}{}
 }
+\value{
+1
+}
 \description{
 Not working yet -- pack kW should be on a separate panel, or smoothed
 so that it's not so intrusive
