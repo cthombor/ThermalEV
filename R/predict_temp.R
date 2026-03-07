@@ -113,7 +113,6 @@ predict_temp <- function(tmodel = NULL,
               "temperatures greater than 50 in the pack_t4_c column")
     }
 
-
     #todo: ? mark outliers with NA in delta_t, so they'll be ignored.
     # downsides: the csv file might be repairable, an occasional
     # outlier shouldn't greatly affect the estimates from nlm(), and

@@ -4,7 +4,7 @@
 #'
 #' @param m
 #'
-#' @returns 1
+#' @returns an Environment
 #' @export
 #'
 #' @examples

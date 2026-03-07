@@ -10,7 +10,7 @@ plot_fit(m)
 \item{m}{}
 }
 \value{
-1
+an Environment
 }
 \description{
 #todo: dispatch through generic plot()

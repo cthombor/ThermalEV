@@ -49,6 +49,24 @@ default_params <- function(m) {
                          lambda_pack_to_ambient = 8,
                          heat_capacity = 1.0e6)
   }
+  m$modified.last.time <- now()
+  return(m)
+}
+
+#' setter for the name field of thmodel
+#'
+#' @param m a thmodel
+#' @param nm a friendly and informative name for this thmodel
+#'
+#' @returns the modified thmodel
+#' @export
+#'
+#' @examples
+#' m <- set_name_thmodel(predict_temp(), "26Jan2026, 50kWh, no AC")
+# todo: dispatch as S3 method through set_name() or set()
+set_name_thmodel <- function(m, nm) {
+  m$name <- nm
+  m$modified.last.time <- now()
   return(m)
 }
 
@@ -59,4 +77,4 @@ default_params <- function(m) {
 #todo: write getters and setters, with the setters updating modified.last.time
 #if modifying the value of a field
 
-#todo: write helpers for summary and plot
+#todo: write a summary method
