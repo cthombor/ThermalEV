@@ -1,6 +1,3 @@
-library(tidyverse)
-library(xts)
-
 #' fit_model: uses nlm() to find a best-fit, with MSE criterion
 #'
 #' @param m a thmodel

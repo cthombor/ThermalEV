@@ -1,8 +1,3 @@
-library(tidyverse)
-library(usethis)
-library(xts)
-library(janitor)
-
 #' Munges a csv to ensure it has no VIN column, has timestamps in ISO format,
 #' and has tidied column names.  Side effect: updates this csv file.  Returns
 #' a thmodel with this csv as its logdata, and with provenance fields set.

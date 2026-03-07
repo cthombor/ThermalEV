@@ -1,9 +1,4 @@
-# Plotting utilities
-
-library(tidyverse)
-library(xts)
-
-#' Plot pack temp, predicted pack temp, ambient temp, pack kW (smoothed)
+#' Plot pack temp, predicted pack temp, ambient temp, kW (smoothed)
 #'
 #' #todo: dispatch through generic plot()
 #'

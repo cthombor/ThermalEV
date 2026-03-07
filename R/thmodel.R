@@ -1,8 +1,5 @@
 # thmodel: S3 class constructors and helpers
 
-library(tidyverse)
-library(xts)
-
 #' new_thmodel.  A lean-and-mean constructor, defining only the names and
 #' classes of the required fields.
 #'
