@@ -5,20 +5,20 @@ library(xts)
 #'
 #' @param m a thmodel
 #'
-#' @param packr starting value of effective resistance, in Ohms
-#' @param lambda1 starting value of the cell-to-module time constant, in seconds
-#' @param lambda2 starting value of the module-to-ambient time constant, in sec
 #' @param print.level 0 for quiet, 1 for start and endpoints, 2 for verbose
+#' @param effective_pack_resistance in mOhms
+#' @param lambda_cell_to_pack in seconds
+#' @param lambda_pack_to_ambient in hours
 #'
-#' @returns list retval from nlm(), describing its best-fit
+#' @returns a list, retval from nlm() describing its best-fit
 #' @export
 #'
 #' @examples
 #' m <- fit_model(print.level = 2)
 fit_model <- function(m = NULL,
-                      packr = 4,
-                      lambda1 = 100,
-                      lambda2 = 300,
+                      effective_pack_resistance = NA,
+                      lambda_cell_to_pack = NA,
+                      lambda_pack_to_ambient = NA,
                       print.level = 1) {
 
 #' fm: interface to predict_temp(), for use by nlm()
@@ -44,10 +44,31 @@ fit_model <- function(m = NULL,
 
   if (is.null(m)) m <- munge_logfile()  # use our default logfile
 
+  if (length(m$parameters) == 0) {
+    m <- default_params(m)
+  }
+
+  # param values specified in the method call have precedence. Side effect:
+  # if m$parameters is malformed, throw a "subscript out of bounds" error
+  if (!is.na(effective_pack_resistance)) {
+    m$parameters[["effective_pack_resistance"]] <- effective_pack_resistance
+  }
+  if (!is.na(lambda_cell_to_pack)) {
+    m$parameters[["lambda_cell_to_pack"]] <- lambda_cell_to_pack
+  }
+  if (!is.na(lambda_pack_to_ambient)) {
+    m$parameters[["lambda_pack_to_ambient"]] <- lambda_pack_to_ambient
+  }
+
+  # read a full set of primary factors into shorthand vars
+  packr <- m$parameters[["effective_pack_resistance"]]
+  lambda1 <- m$parameters[["lambda_cell_to_pack"]]
+  lambda2 <- m$parameters[["lambda_pack_to_ambient"]]
+
   m$fit <- nlm(fm,
                p = c(packr, lambda1, lambda2),
                print.level = print.level)
-
+browser()
   # evaluate predict_temp() one last time, on the best fit
   m <- predict_temp(
     m,

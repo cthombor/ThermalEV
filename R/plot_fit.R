@@ -3,10 +3,7 @@
 library(tidyverse)
 library(xts)
 
-#' Plot pack temp, predicted pack temp, ambient temp, pack kW
-#'
-#' Not working yet -- pack kW should be on a separate panel, or smoothed
-#' so that it's not so intrusive
+#' Plot pack temp, predicted pack temp, ambient temp, pack kW (smoothed)
 #'
 #' #todo: dispatch through generic plot()
 #'
@@ -20,16 +17,20 @@ library(xts)
 #' plot_fit(fit_model())
 plot_fit <- function(m)
 {
-  browser()
   pd <- m$logdata |>
-    mutate(
-      smoothed_kW = smooth.spline(pack_kW)$y
-    ) |>
+    mutate(charging_kW =
+             smooth(
+               ifelse(pack_amps > 0, 0, -pack_amps * pack_volts)) / 1000,
+           discharge_kW =
+             smooth(
+               ifelse(pack_amps > 0, pack_amps * pack_volts, 0)) / 1000
+           ) |>
     select(date_time,
            pack_avg_temp,
            pred_pack_avg_temp,
            ambient,
-           smoothed_kW) |>
+           charging_kW,
+           discharge_kW) |>
     as.xts()
   pd |>
     plot(
@@ -40,11 +41,11 @@ plot_fit <- function(m)
       main = paste0(
         m$name,
         ": r = ",
-        format((m$parameters)[[1]] * 1000, digits = 3),
+        format((m$parameters)[[1]], digits = 3),
         " mΩ, λ1 = ",
         format((m$parameters)[[2]], digits = 3),
         " s, λ2 = ",
-        format((m$parameters)[[3]] / 3600, digits = 3),
+        format((m$parameters)[[3]], digits = 3),
         " h"
       )
     )

@@ -6,10 +6,10 @@
 \usage{
 predict_temp(
   tmodel = NULL,
-  effective_pack_resistance = 0.4,
-  lambda_cell_to_pack = 100,
-  lambda_pack_to_ambient = 300,
-  heat_capacity = 1e+06,
+  effective_pack_resistance = NA,
+  lambda_cell_to_pack = NA,
+  lambda_pack_to_ambient = NA,
+  heat_capacity = NA,
   min_segment_length = 50,
   logfilnm = "log26Jan2026.csv",
   logfildir = "data-raw"
@@ -18,11 +18,11 @@ predict_temp(
 \arguments{
 \item{tmodel}{a thmodel, optional}
 
-\item{effective_pack_resistance}{in Ohms, a primary parameter}
+\item{effective_pack_resistance}{in mOhms, a primary parameter}
 
 \item{lambda_cell_to_pack}{in seconds, a primary parameter}
 
-\item{lambda_pack_to_ambient}{in seconds, a primary parameter}
+\item{lambda_pack_to_ambient}{in hours, a primary parameter}
 
 \item{heat_capacity}{in J/K, a secondary parameter}
 

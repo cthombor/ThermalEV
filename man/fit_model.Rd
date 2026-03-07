@@ -4,23 +4,29 @@
 \alias{fit_model}
 \title{fit_model: uses nlm() to find a best-fit, with MSE criterion}
 \usage{
-fit_model(m = NULL, packr = 4, lambda1 = 100, lambda2 = 300, print.level = 1)
+fit_model(
+  m = NULL,
+  effective_pack_resistance = NA,
+  lambda_cell_to_pack = NA,
+  lambda_pack_to_ambient = NA,
+  print.level = 1
+)
 }
 \arguments{
 \item{m}{a thmodel}
 
-\item{packr}{starting value of effective resistance, in Ohms}
+\item{effective_pack_resistance}{in mOhms}
 
-\item{lambda1}{starting value of the cell-to-module time constant, in seconds}
+\item{lambda_cell_to_pack}{in seconds}
 
-\item{lambda2}{starting value of the module-to-ambient time constant, in sec}
+\item{lambda_pack_to_ambient}{in hours}
 
 \item{print.level}{0 for quiet, 1 for start and endpoints, 2 for verbose}
 
 \item{x}{parameter list}
 }
 \value{
-list retval from nlm(), describing its best-fit
+a list, retval from nlm() describing its best-fit
 
 MSE of the fit
 }

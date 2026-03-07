@@ -21,9 +21,9 @@
 #' and divided by its heat capacity (in J/K).
 #'
 #' @param tmodel a thmodel, optional
-#' @param effective_pack_resistance in Ohms, a primary parameter
+#' @param effective_pack_resistance in mOhms, a primary parameter
 #' @param lambda_cell_to_pack in seconds, a primary parameter
-#' @param lambda_pack_to_ambient in seconds, a primary parameter
+#' @param lambda_pack_to_ambient in hours, a primary parameter
 #' @param heat_capacity in J/K, a secondary parameter
 #' @param min_segment_length shorter sequences of samples are ignored
 #' @param logfilnm name of a csv logfile to be read, if is.null(tmodel)
@@ -37,19 +37,13 @@
 #' m <- m |> predict_temp(effective_pack_resistance = 0.5)
 
 predict_temp <- function(tmodel = NULL,
-                         effective_pack_resistance = 0.4,
-                         lambda_cell_to_pack = 1.0e2,
-                         lambda_pack_to_ambient = 300,
-                         heat_capacity = 1.0e6,
+                         effective_pack_resistance = NA,
+                         lambda_cell_to_pack = NA,
+                         lambda_pack_to_ambient = NA,
+                         heat_capacity = NA,
                          min_segment_length = 50,
                          logfilnm = "log26Jan2026.csv",
                          logfildir = "data-raw") {
-
-  #todo: ? rescale model parameters for consistency with plot_fit()
-
-  #todo: ? remove default values for model parameters, so that the ones
-  # in a non-null tmodel are used unless the user explicitly specifies a
-  # change
 
   if (!nzchar(logfilnm) && is.null(tmodel)) {
     stop("Aborting. Please specify the name of a LeafSpy logfile.")
@@ -61,10 +55,37 @@ predict_temp <- function(tmodel = NULL,
     }
   } # endif (!nzchar(logfile))
 
+  if (length(m$parameters) == 0) {
+    m <- default_params(m)
+  }
   logtibble <- m$logdata
 
+  # param values specified in the method call have precedence. Side effect:
+  # if m$parameters is malformed, throw a "subscript out of bounds" error
+  if (!is.na(effective_pack_resistance)) {
+    m$parameters[["effective_pack_resistance"]] <- effective_pack_resistance
+  }
+  if (!is.na(lambda_cell_to_pack)) {
+    m$parameters[["lambda_cell_to_pack"]] <- lambda_cell_to_pack
+  }
+  if (!is.na(lambda_pack_to_ambient)) {
+    m$parameters[["lambda_pack_to_ambient"]] <- lambda_pack_to_ambient
+  }
+  if (!is.na(heat_capacity)) {
+    m$parameters[["heat_capacity"]] <- heat_capacity
+  }
+
+  # read a full set of params
+  effective_pack_resistance <- m$parameters[["effective_pack_resistance"]]
+  lambda_cell_to_pack <- m$parameters[["lambda_cell_to_pack"]]
+  lambda_pack_to_ambient <- m$parameters[["lambda_pack_to_ambient"]]
+  heat_capacity <- m$parameters[["heat_capacity"]]
+
+  # n.b. additional secondary parameters e.g. ones used only by nlm(),
+  # may be stored in m$parameters
+
   if (!"delta_t" %in% names(logtibble)) {
-    # avoid recomputing these columns
+    # a minor optimisation: we avoid recomputing these columns
 
     #compute delta_t for runs of near-consecutive samples
     logtibble <- logtibble |>
@@ -78,11 +99,25 @@ predict_temp <- function(tmodel = NULL,
     logtibble <- logtibble |>
       mutate(delta_t = ifelse(delta_t > max_delta_t, NA, delta_t))
 
-    # pack_t3_c is uniformly NA in all my logfiles!
+    # strangely, pack_t3_c is uniformly NA in all my logfiles.
     logtibble <- logtibble |>
       mutate(pack_avg_temp = rowMeans(across(c(
         pack_t1_c, pack_t2_c, pack_t4_c
       ))), .before = cp1)
+
+    # n.b. csv file corruption may result in a temperature in Fahrenheit
+    # appearing as a wildly-improbable value in a Centigrade column
+    outlier_temps <- which(logtibble$pack_t4_c > 50)
+    if (length(outlier_temps) > 0) {
+      warning(paste(length(outlier_temps) > 0),
+              "temperatures greater than 50 in the pack_t4_c column")
+    }
+
+
+    #todo: ? mark outliers with NA in delta_t, so they'll be ignored.
+    # downsides: the csv file might be repairable, an occasional
+    # outlier shouldn't greatly affect the estimates from nlm(), and
+    # any automagic outlier-rejection is hazardous
 
     # rate of heat gain (in K/s)
     logtibble <- logtibble |>
@@ -90,27 +125,20 @@ predict_temp <- function(tmodel = NULL,
                (pack_avg_temp - lag(pack_avg_temp)) / delta_t,
              .before = cp1)
 
-    # charging power (in kW)
-    logtibble <- logtibble |>
-      mutate(charging_kW = obc_out_pwr / 1000.0, .before = cp1)
-
-    # pack power (in kW)
-    logtibble <- logtibble |>
-      mutate(pack_kW = pack_volts * abs(pack_amps) / 1000.0, .before = cp1)
-
     #munge soc to a percentage, for ease of plotting and by convention
-    logtibble <- logtibble |> mutate (soc = soc / 10000)
+    logtibble <- logtibble |> mutate (psoc = soc / 10000, .before = cp1)
 
   }
 
   # we now predict temperatures, using the parameters
 
   # predicted Joule heating of cells (in W)
+  # n.b. the resistance is in mOhms
   logtibble <- logtibble |>
     mutate(
       pred_Joule_heating =
         pack_amps * pack_amps *
-        effective_pack_resistance,
+        effective_pack_resistance / 1000,
       .before = cp1
     )
 
@@ -213,7 +241,10 @@ predict_temp <- function(tmodel = NULL,
   ambient_v <- logtibble$ambient
   pred_temp_v <- as.vector(pred_pack_avg_temp_xts[,1,drop=TRUE])
   old_pred_v <- pred_temp_v
-  EMA_parameter_pack_to_ambient <- sampling_interval / lambda_pack_to_ambient
+
+  # n.b. the second time constant is in hours
+  EMA_parameter_pack_to_ambient <-
+    sampling_interval / (lambda_pack_to_ambient * 3600)
   for (i in seq(nsegments)[which(!wexclude)]) {
     # It might be interesting to benchmark R's Tailcall() against the following
     # "manual" TCO of a simple recursive filter.  See
@@ -240,12 +271,6 @@ predict_temp <- function(tmodel = NULL,
            .before = "cp1") |>
     select(!c(pred_Joule_heating, pred_heating_unlagged))
   m$logdata <- logtibble
-  m$filnm <- logfilnm
-  m$fildir <- logfildir
-  m$parameters <- list(effective_pack_resistance = effective_pack_resistance,
-                    lambda_cell_to_pack = lambda_cell_to_pack,
-                    lambda_pack_to_ambient = lambda_pack_to_ambient,
-                    heat_capacity = heat_capacity)
   m$modified.last.time <- now()
   return(m)
 

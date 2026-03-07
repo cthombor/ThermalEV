@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_fit.R
 \name{plot_fit}
 \alias{plot_fit}
-\title{Plot pack temp, predicted pack temp, ambient temp, pack kW}
+\title{Plot pack temp, predicted pack temp, ambient temp, pack kW (smoothed)}
 \usage{
 plot_fit(m)
 }
@@ -13,10 +13,6 @@ plot_fit(m)
 1
 }
 \description{
-Not working yet -- pack kW should be on a separate panel, or smoothed
-so that it's not so intrusive
-}
-\details{
 #todo: dispatch through generic plot()
 }
 \examples{
