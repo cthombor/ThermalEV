@@ -27,23 +27,24 @@ plot_log <- function(m)
   #n.b. GPS signals are not always available
   firstloc <- first(which(!is.na(m$logdata$lat)))
   lastloc <-  last(which(!is.na(m$logdata$lat)))
-  startlat  <- substring(m$logdata$lat[firstloc], 1, 9)
-  startlong <- substring(m$logdata$long[firstloc], 1, 9)
-  lastlat   <- substring(m$logdata$lat[lastloc], 1, 9)
-  lastlong  <- substring(m$logdata$long[lastloc], 1, 9)
+  startlat  <- round(parzer::parse_lat(m$logdata$lat[firstloc]),2)
+  startlong <- round(parzer::parse_lon(m$logdata$long[firstloc]),2)
+  lastlat   <- round(parzer::parse_lat(m$logdata$lat[lastloc]),2)
+  lastlong  <- round(parzer::parse_lon(m$logdata$long[lastloc]),2)
   startloc <- paste0(startlat, ", ", startlong)
   endloc <- paste0(lastlat, ", ", lastlong)
 
-  pd[,1:4] |>
+  pd |>
     plot(
       legend.loc = "top",
       main.timespan = FALSE,
       main = paste0(
         m$name,
-        ": from ",
+        ": from (",
         startloc,
-        "; to ",
-        endloc
+        ") to (",
+        endloc,
+        ")"
       )
     )
 }
