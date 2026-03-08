@@ -65,7 +65,7 @@ fit_model <- function(m = NULL,
   m$fit <- nlm(fm,
                p = c(packr, lambda1, lambda2),
                print.level = print.level)
-browser()
+
   # evaluate predict_temp() one last time, on the best fit
   m <- predict_temp(
     m,

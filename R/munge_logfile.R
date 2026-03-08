@@ -4,6 +4,7 @@
 #'
 #' @param logfildir directory of csv logfile to be interpreted as a thmodel
 #' @param logfilnm  name of logfile to be interpreted
+#' @param logname friendly and informative name for this logfile
 #'
 #' @returns thmodel
 #' @export
@@ -12,7 +13,8 @@
 #' m <- munge_logfile()
 
 munge_logfile <- function(logfildir = "data-raw",
-                          logfilnm = "log26Jan2026.csv") {
+                          logfilnm = "log26Jan2026.csv",
+                          logname = "26Jan2026 50kWh noAC") {
 
     # read a csv file, create a new thmodel object, possibly write a munged csv
     logfilpath <- paste0(here::here(logfildir), "/", logfilnm)
@@ -39,38 +41,41 @@ munge_logfile <- function(logfildir = "data-raw",
       )
     }
 
+    #todo: sanity-check any csv, to assure that it is fit for purpose
+    #as input to our code.  Any rev to LeafSpy, or any difference in its
+    #setup, might produce incompatible csv files.
+
+    tbl <- tbl |>
+
+      #n.b. there may be multiple Debug cols in LeafSpy logs, causing
+      #annoying warning messages when they're imported into the tidyverse
+      select(!starts_with("Debug")) |>
+
+      #n.b. LeafSpy writes a 0 in the odo_km field when the car is
+      #not in Drive mode. These are better represented as NA.
+      mutate(odo_km = ifelse(odo_km == 0, NA, odo_km)) |>
+
+      janitor::clean_names() |>
+
+      arrange(date_time)
+
     if (!already_munged) {
-      tbl <- tbl |>
-        select(!starts_with("Debug")) |>
-        #n.b. there may be multiple Debug cols in LeafSpy logs
+      #n.b. publishing a VIN is hazardous, because it's sometimes used as a
+      #self-authenticating identifier ("security by obscurity") and also
+      #because it is PII of no relevance to the analysis.
+      tbl <- tbl |> select(!VIN)
 
-        select(!VIN) |>
-        #n.b. publishing a VIN is hazardous, because it's sometimes used as a
-        #self-authenticating identifier ("security by obscurity") and also
-        #because it is PII of no relevance to the analysis.
-
-        #todo: add a pseudoVIN, and other descriptive information about
-        #the vehicle, to metadata fields in a bespoke logtibble class.
-
-        janitor::clean_names()
-
-      #TODO: convert Lat and Long to double (or delete, for location-privacy)
-      #  stackoverflow.com/questions/69484220/
-      #    convert-dms-coordinates-to-decimal-degrees-in-r
+      #todo: mutate to a securely hashed VIN. ?keyed to what secret?
 
       #write the munged file to disk
       write_csv(tbl, logfilpath)
-
-    } else {
-      #todo: sanity-check any VIN-less csv, to assure that it is fit for purpose
-      #as input to our code.  Any rev to LeafSpy, or any difference in its
-      #setup, might produce csv files that are incompatible with our code.
     }
 
     m <- new_thmodel()
     m$name <- str_sub(logfilnm, 1, (nchar(logfilnm) - 4)) # strip extension
     m$filnm <- logfilnm
     m$fildir <- logfildir
+    m$name <- logname
     m$logdata <- tbl
 
     #todo: carefully consider writing m to data/name.rda, to optimise reloads of

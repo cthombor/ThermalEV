@@ -9,20 +9,38 @@
 #' plot_log(predict_temp())
 plot_log <- function(m)
 {
-  #n.b. odo_km == 0 when the vehicle is in Acc mode
+  #n.b. odo_km == NA when the vehicle is not in Drive mode.  (In the
+  #unmunged LeafSpy csv logs, odo_km == 0 when the vehicle is not
+  #in Drive.)
+
+  firstodo <- m$logdata$odo_km[first(which(!is.na(m$logdata$odo_km)))]
+
   pd <- m$logdata |>
-    mutate(distance = ifelse(odo_km == 0, NA, odo_km - first(odo_km)),
+    mutate(distance = odo_km - firstodo,
+           'distance/10' = distance / 10,
            speed = smooth(speed),
            'elv/10' = smooth(elv) / 10,
            SOC = soc / 10000
-    ) |>
-    select(date_time,
-           distance,
-           speed,
-           'elv/10',
-           SOC
-    ) |>
-    as.xts()
+    )
+  if (max(pd$distance, na.rm = TRUE) < 150) {
+    pd <- pd |>
+      select(date_time,
+             distance,
+             speed,
+             'elv/10',
+             SOC
+      ) |>
+      as.xts()
+  } else {
+    pd <- pd |>
+      select(date_time,
+             'distance/10',
+             speed,
+             'elv/10',
+             SOC
+      ) |>
+      as.xts()
+  }
 
   #n.b. GPS signals are not always available
   firstloc <- first(which(!is.na(m$logdata$lat)))

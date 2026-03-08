@@ -105,27 +105,24 @@ predict_temp <- function(tmodel = NULL,
         pack_t1_c, pack_t2_c, pack_t4_c
       ))), .before = cp1)
 
-    # n.b. csv file corruption may result in a temperature in Fahrenheit
-    # appearing as a wildly-improbable value in a Centigrade column
+    # n.b. ambient temps are unreliable at the start of a segment: they're
+    # sometimes reported in degrees F rather than degrees C.
+    logtibble <- logtibble |>
+      mutate(ambient = ifelse(is.na(delta_t), NA, ambient))
+
+    # n.b. pack temps seem to be reliably reported in degrees C, but we'll
+    # monitor this...
     outlier_temps <- which(logtibble$pack_t4_c > 50)
     if (length(outlier_temps) > 0) {
       warning(paste(length(outlier_temps) > 0),
               "temperatures greater than 50 in the pack_t4_c column")
     }
 
-    #todo: ? mark outliers with NA in delta_t, so they'll be ignored.
-    # downsides: the csv file might be repairable, an occasional
-    # outlier shouldn't greatly affect the estimates from nlm(), and
-    # any automagic outlier-rejection is hazardous
-
     # rate of heat gain (in K/s)
     logtibble <- logtibble |>
       mutate(delta_K_delta_t =
                (pack_avg_temp - lag(pack_avg_temp)) / delta_t,
              .before = cp1)
-
-    #munge soc to a percentage, for ease of plotting and by convention
-    logtibble <- logtibble |> mutate (psoc = soc / 10000, .before = cp1)
 
   }
 

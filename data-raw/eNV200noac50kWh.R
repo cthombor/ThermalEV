@@ -1,6 +1,9 @@
 ## concatenates csv files in data-raw/eNV200noac50kWh/ to create
 ## data/eNV200noac50kWh.rda
 
+# todo: develop a much smaller example, put it in inst/extdata as
+# per section 7.3 in https://r-pkgs.org/data.html
+
 # warning: this script munges csv files in data-raw/eNV200noac50kWh/, deleting
 # any "VIN" column to maintain the security-by-obscurity defense against
 # malicious use of this identifier.
@@ -51,7 +54,8 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
 
   m_list <- lapply(filnm_list, function(x)
     munge_logfile(logfildir = logfildir,
-                  logfilnm = x))
+                  logfilnm = x,
+                  logname = x))
 
   tbl_list <- lapply(m_list, function(x) x$logdata)
 
@@ -59,8 +63,8 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
 
   m <- new_thmodel()
   m$logdata <- t
-  m$name <- name
   m$filnm <- ""
+  m$name <- name
   m$fildir <- logfildir
 
   return(m)
