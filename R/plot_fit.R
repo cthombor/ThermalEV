@@ -30,9 +30,9 @@ plot_fit <- function(m)
   pd |>
     plot(
       legend.loc = "top",
+      type = "p",
+      pch = 1,
       main.timespan = FALSE,
-      #        multi.panel = 3,
-      #        y.axis = same,
       main = paste0(
         m$name,
         ": r = ",
