@@ -15,15 +15,15 @@ plot_log <- function(m)
 
   firstodo <- m$logdata$odo_km[first(which(!is.na(m$logdata$odo_km)))]
 
-  pd <- m$logdata |>
+  x <- m$logdata |>
     mutate(distance = odo_km - firstodo,
            'distance/10' = distance / 10,
            speed = smooth(speed),
            'elv/10' = smooth(elv) / 10,
            SOC = soc / 10000
     )
-  if (max(pd$distance, na.rm = TRUE) < 150) {
-    pd <- pd |>
+  if (max(x$distance, na.rm = TRUE) < 150) {
+    x <- x |>
       select(date_time,
              distance,
              speed,
@@ -32,7 +32,7 @@ plot_log <- function(m)
       ) |>
       as.xts()
   } else {
-    pd <- pd |>
+    x <- x |>
       select(date_time,
              'distance/10',
              speed,
@@ -52,17 +52,10 @@ plot_log <- function(m)
   startloc <- paste0(startlat, ", ", startlong)
   endloc <- paste0(lastlat, ", ", lastlong)
 
-  pd |>
-    plot(
-      legend.loc = "top",
-      main.timespan = FALSE,
-      main = paste0(
-        m$name,
-        ": from (",
-        startloc,
-        ") to (",
-        endloc,
-        ")"
-      )
-    )
+  plot(
+    x,
+    legend.loc = "top",
+    main.timespan = FALSE,
+    main = paste0(m$name, ": from (", startloc, ") to (", endloc, ")")
+  )
 }

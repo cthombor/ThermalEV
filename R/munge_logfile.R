@@ -2,9 +2,9 @@
 #' and has tidied column names.  Side effect: updates this csv file.  Returns
 #' a thmodel with this csv as its logdata, and with provenance fields set.
 #'
-#' @param logfildir directory of csv logfile to be interpreted as a thmodel
 #' @param logfilnm  name of logfile to be interpreted
-#' @param logname friendly and informative name for this logfile
+#' @param logfildir directory of csv logfile, optional
+#' @param logname friendly and informative name for this logfile, optional
 #'
 #' @returns thmodel
 #' @export
@@ -12,9 +12,9 @@
 #' @examples
 #' m <- munge_logfile()
 
-munge_logfile <- function(logfildir = "data-raw",
-                          logfilnm = "log26Jan2026.csv",
-                          logname = "26Jan2026 50kWh noAC") {
+munge_logfile <- function(logfilnm = "log26Jan2026.csv",
+                          logfildir = "data-raw",
+                          logname = NULL) {
 
     # read a csv file, create a new thmodel object, possibly write a munged csv
     logfilpath <- paste0(here::here(logfildir), "/", logfilnm)
@@ -72,13 +72,14 @@ munge_logfile <- function(logfildir = "data-raw",
     }
 
     m <- new_thmodel()
-    m$name <- str_sub(logfilnm, 1, (nchar(logfilnm) - 4)) # strip extension
+    m$name <- ifelse(is.null(logname),
+                     str_sub(logfilnm, 1, (nchar(logfilnm) - 4)),
+                     logname)
     m$filnm <- logfilnm
     m$fildir <- logfildir
-    m$name <- logname
     m$logdata <- tbl
 
-    #todo: carefully consider writing m to data/name.rda, to optimise reloads of
+    #todo: consider writing m to data/name.rda, to optimise reloads of
     #csv from data-raw/. Downside: the user must specify "data" as the logfildir
     #in future, to benefit from this optimisation. Downside: this might cause
     #confusion about versioning of thmodel objects and csv files.

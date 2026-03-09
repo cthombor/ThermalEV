@@ -7,17 +7,17 @@ and has tidied column names.  Side effect: updates this csv file.  Returns
 a thmodel with this csv as its logdata, and with provenance fields set.}
 \usage{
 munge_logfile(
-  logfildir = "data-raw",
   logfilnm = "log26Jan2026.csv",
-  logname = "26Jan2026 50kWh noAC"
+  logfildir = "data-raw",
+  logname = NULL
 )
 }
 \arguments{
-\item{logfildir}{directory of csv logfile to be interpreted as a thmodel}
-
 \item{logfilnm}{name of logfile to be interpreted}
 
-\item{logname}{friendly and informative name for this logfile}
+\item{logfildir}{directory of csv logfile, optional}
+
+\item{logname}{friendly and informative name for this logfile, optional}
 }
 \value{
 thmodel

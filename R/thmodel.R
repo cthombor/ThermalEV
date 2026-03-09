@@ -9,7 +9,6 @@
 #' @examples
 #' m <- new_thmodel()
 new_thmodel <- function() {
-  m <- structure(list(), class = "thmodel")
   m <-
     list(
       name = "",
@@ -30,6 +29,7 @@ new_thmodel <- function() {
       # LeafSpy as munged by munge_logfile, with additional columns
       # from thmodel.predict_temp() on the parameters
     )
+  m <- structure(m, class = "thmodel")
   return(m)
 }
 
