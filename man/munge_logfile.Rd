@@ -3,8 +3,9 @@
 \name{munge_logfile}
 \alias{munge_logfile}
 \title{Munges a csv to ensure it has no VIN column, has timestamps in ISO format,
-and has tidied column names.  Side effect: updates this csv file.  Returns
-a thmodel with this csv as its logdata, and with provenance fields set.}
+is sorted on these timestamps, and has tidied column names.  Side effect:
+updates this csv file.  Returns a thmodel with the munged csv as its logdata,
+and with provenance fields set.}
 \usage{
 munge_logfile(
   logfilnm = "log26Jan2026.csv",
@@ -15,7 +16,7 @@ munge_logfile(
 \arguments{
 \item{logfilnm}{name of logfile to be interpreted}
 
-\item{logfildir}{directory of csv logfile, optional}
+\item{logfildir}{directory of csv logfile, optional, default is "data-raw"}
 
 \item{logname}{friendly and informative name for this logfile, optional}
 }
@@ -24,8 +25,9 @@ thmodel
 }
 \description{
 Munges a csv to ensure it has no VIN column, has timestamps in ISO format,
-and has tidied column names.  Side effect: updates this csv file.  Returns
-a thmodel with this csv as its logdata, and with provenance fields set.
+is sorted on these timestamps, and has tidied column names.  Side effect:
+updates this csv file.  Returns a thmodel with the munged csv as its logdata,
+and with provenance fields set.
 }
 \examples{
 m <- munge_logfile()
