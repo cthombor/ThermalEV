@@ -89,7 +89,7 @@ predict_temp <- function(tmodel = NULL,
 
     #compute delta_t for runs of near-consecutive samples
     logtibble <- logtibble |>
-      mutate(delta_t = date_time - lag(date_time))
+      mutate(delta_t = date_time - dplyr::lag(date_time))
 
     sampling_interval <- as.double(median(logtibble$delta_t, na.rm = TRUE))
     # multiple missing samples will terminate a predictive segment
@@ -121,7 +121,7 @@ predict_temp <- function(tmodel = NULL,
     # rate of heat gain (in K/s)
     logtibble <- logtibble |>
       mutate(delta_K_delta_t =
-               (pack_avg_temp - lag(pack_avg_temp)) / delta_t,
+               (pack_avg_temp - dplyr::lag(pack_avg_temp)) / delta_t,
              .before = cp1)
 
   }
@@ -204,7 +204,7 @@ predict_temp <- function(tmodel = NULL,
 
   # predict pack temps from cumsum of lagged delta-heat in each segment
   segment_starts <- logtibble$date_time[wstart]
-  pred_pack_avg_temp_xts <- lag(lagged_heat)
+  pred_pack_avg_temp_xts <- stats::lag(lagged_heat)
 
   pred_pack_avg_temp_xts[wstart] <- pack_avg_temp_xts[wstart] # observations
   for (i in seq(nsegments)[which(!wexclude)]) {

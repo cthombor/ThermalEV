@@ -1,9 +1,8 @@
 #' Datasets for testing ThermalEV
 #'
-#' eNV200ac24kWh_2025: a large thmodel object, with provenance.  The fields are
+#' eNV200noac50kWh: a large thmodel object, with provenance.  The fields are
 #' as defined in thmodel.R.  The logdata is a tibble with more than 12000 rows
 #' and more than 150 columns.
-#'
 #' @format A thmodel object.  Fields in the logdata include
 #' \describe{
 #'   \item {date_time}{timestamp in POSIXct format}
@@ -17,6 +16,14 @@
 #'   \item {pack_t4_c}{temperature at surface of module 4, at 0.1 K precision}
 #'   \item {odo_km}{odometer reading, if car in Drive mode, otherwise NA}
 #' }
+#'
+#' @source {thmodel} R package.
+"eNV200noac50kWh"
+
+#' eNV200ac24kWh_2025: a thmodel object, with provenance.  The fields are
+#' as defined in thmodel.R.  The logdata is a tibble with more than 3600 rows
+#' and more than 150 columns.
+#' @format A thmodel object.
 #'
 #' @source {thmodel} R package.
 "eNV200ac24kWh_2025"

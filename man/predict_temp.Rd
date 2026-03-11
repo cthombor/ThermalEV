@@ -52,7 +52,7 @@ The 96 cells in my aftermarket 50kWh pack weigh 2.13 kg apiece, so there's a
 total of roughly 200kg of water (at 4.13 J/gK) in the electrolyte.  There'll
 be some additional heat content in the 100kg of non-cell contents in the
 pack. Polyethylene is 2.0 J/gK, steel is 0.5 J/gK, everything else is less.
-As a round number, the heat content of the pack is thus 1.0e6.  This is a
+As a round number, the heat content of the pack is thus 1.0e6 J/K.  This is a
 secondary parameter in our modelling because the Joule heating (in K) of a
 pack is the square of its amperage, multiplied by its effective resistance
 and divided by its heat capacity (in J/K).

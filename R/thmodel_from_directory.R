@@ -7,8 +7,8 @@
 #' warning: this script munges the csv files in the target directory, using
 #' 'munge_logfile()'
 #'
-#' @param logfildir
-#' @param name
+#' @param logfildir path to directory containing csv files
+#' @param name friendly name for this thmodel
 #'
 #' @returns a thmodel
 #' @export

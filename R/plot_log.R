@@ -13,7 +13,8 @@ plot_log <- function(m)
   #unmunged LeafSpy csv logs, odo_km == 0 when the vehicle is not
   #in Drive.)
 
-  firstodo <- m$logdata$odo_km[first(which(!is.na(m$logdata$odo_km)))]
+  firstodo <- m$logdata$odo_km[
+    dplyr::first(which(!is.na(m$logdata$odo_km)))]
 
   x <- m$logdata |>
     mutate(distance = odo_km - firstodo,
@@ -43,8 +44,8 @@ plot_log <- function(m)
   }
 
   #n.b. GPS signals are not always available
-  firstloc <- first(which(!is.na(m$logdata$lat)))
-  lastloc <-  last(which(!is.na(m$logdata$lat)))
+  firstloc <- dplyr::first(which(!is.na(m$logdata$lat)))
+  lastloc <-  dplyr::last(which(!is.na(m$logdata$lat)))
   startlat  <- round(parzer::parse_lat(m$logdata$lat[firstloc]),2)
   startlong <- round(parzer::parse_lon(m$logdata$long[firstloc]),2)
   lastlat   <- round(parzer::parse_lat(m$logdata$lat[lastloc]),2)
