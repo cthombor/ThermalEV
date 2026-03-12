@@ -74,6 +74,19 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
 
     #todo: mutate to a securely hashed VIN. ?keyed to what secret?
 
+    #n.b. publishing high-resolution lat/long data is a privacy
+    #hazard which can be mitigated by munging, without impairing
+    #the accuracy of a thermal model.
+    latv <- select(tbl, lat)
+    regexpv <- rep("[.]", length(latv))
+    # we retain one decimal point of accuracy in the minutes
+    # n.b. LeafSpy writes lat/long data as strings in "degree minute" format
+    # this is very untidy code
+    ft <- function(x) substr(x,1,str_locate(x,"[.]") + 1 )
+    latt <- ft(latv[[1]])
+    longt <- ft(select(tbl, long)[[1]])
+    tbl <- tbl |> mutate(lat = latt, long = longt)
+
     #write the munged file to disk
     write_csv(tbl, logfilpath)
   }

@@ -259,7 +259,11 @@ predict_temp <- function(tmodel = NULL,
     }
   }
 
-  pred_temp_v[wstart] <- NA # these are not predictions
+  # these are not predictions, so shouldn't affect MSE of the fit
+  pred_temp_v[wstart] <- NA
+  for (i in seq(nsegments)[which(wexclude)]) {
+    pred_temp_v[wstart[i]:wend[i]] <- NA
+  }
 
   # return to the tidyverse!  Hooray!!
   logtibble <- logtibble |>

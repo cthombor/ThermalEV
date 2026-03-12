@@ -44,9 +44,11 @@ new_thmodel <- function() {
 #' @examples default_params(new_thmodel())
 default_params <- function(m) {
   if (length(m$parameters) == 0) {
-    m$parameters <- list(effective_pack_resistance = 400,
-                         lambda_cell_to_pack = 100,
-                         lambda_pack_to_ambient = 8,
+    #default params from fitting eNV200noac50kWh.rda
+    #todo: update defaults after adding an AC_COP parameter
+    m$parameters <- list(effective_pack_resistance = 360,
+                         lambda_cell_to_pack = 243,
+                         lambda_pack_to_ambient = 7.68,
                          heat_capacity = 1.0e6)
   }
   m$modified.last.time <- now()

@@ -7,7 +7,9 @@
 thmodel_from_directory(logfildir = "data-raw/eNV200noac50kWh", name = NULL)
 }
 \arguments{
-\item{name}{}
+\item{logfildir}{path to directory containing csv files}
+
+\item{name}{friendly name for this thmodel}
 }
 \value{
 a thmodel

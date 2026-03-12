@@ -19,6 +19,7 @@ plot_log <- function(m)
   x <- m$logdata |>
     mutate(distance = odo_km - firstodo,
            'distance/10' = distance / 10,
+           'distance/100' = distance / 100,
            speed = smooth(speed),
            'elv/10' = smooth(elv) / 10,
            SOC = soc / 10000
@@ -32,10 +33,19 @@ plot_log <- function(m)
              SOC
       ) |>
       as.xts()
-  } else {
+  } else if (max(x$distance, na.rm = TRUE) < 1500) {
     x <- x |>
       select(date_time,
              'distance/10',
+             speed,
+             'elv/10',
+             SOC
+      ) |>
+      as.xts()
+  } else {
+    x <- x |>
+      select(date_time,
+             'distance/100',
              speed,
              'elv/10',
              SOC
