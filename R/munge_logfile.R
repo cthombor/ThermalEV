@@ -6,7 +6,7 @@
 #' @param logfilnm  name of logfile to be interpreted
 #' @param logfildir directory of csv logfile, optional, default is "data-raw"
 #' @param logname friendly and informative name for this logfile, optional
-#'
+#' @param USonian_dates TRUE: %m/%d/%y parsing; FALSE: %d/%m/%y parsing
 #' @returns thmodel
 #' @export
 #'
@@ -15,7 +15,8 @@
 
 munge_logfile <- function(logfilnm = "log26Jan2026.csv",
                           logfildir = "data-raw",
-                          logname = NULL) {
+                          logname = NULL,
+                          USonian_dates = TRUE) {
   #todo: ? default logfildir to "extdata" ? See https://r-pkgs.org/data.html
 
   # read a csv file, create a new thmodel object, possibly write a munged csv
@@ -38,7 +39,9 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
     tbl <- read_csv(
       logfilpath,
       name_repair = "unique",
-      col_types = cols(`Date/Time` = col_datetime("%d/%m/%Y %H:%M:%S")),
+      col_types = cols(`Date/Time` = col_datetime(
+        ifelse(USonian_dates, "%m/%d/%Y%.%H:%M:%S", "%d/%m/%Y%.%H:%M:%S")
+      )),
       show_col_types = FALSE
     )
   }

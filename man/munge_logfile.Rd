@@ -10,7 +10,8 @@ and with provenance fields set.}
 munge_logfile(
   logfilnm = "log26Jan2026.csv",
   logfildir = "data-raw",
-  logname = NULL
+  logname = NULL,
+  USonian_dates = TRUE
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ munge_logfile(
 \item{logfildir}{directory of csv logfile, optional, default is "data-raw"}
 
 \item{logname}{friendly and informative name for this logfile, optional}
+
+\item{USonian_dates}{TRUE: %m/%d/%y parsing; FALSE: %d/%m/%y parsing}
 }
 \value{
 thmodel

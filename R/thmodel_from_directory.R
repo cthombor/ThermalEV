@@ -21,10 +21,16 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
 
   filnm_list <- list.files(here::here(logfildir))
 
-  m_list <- lapply(filnm_list, function(x)
-    munge_logfile(logfildir = logfildir,
+#  m_list <- lapply(filnm_list, function(x)
+  # unrolled: for debugging errors in parsing with browser()
+  m_list <- vector("list", length = length(filnm_list))
+  for (i in seq(length(filnm_list))) {
+    x <- filnm_list[[i]]
+    m_list[[i]] <- munge_logfile(logfildir = logfildir,
                   logfilnm = x,
-                  logname = x))
+                  logname = x)
+  }
+# )
 
   tbl_list <- lapply(m_list, function(x) x$logdata)
 
