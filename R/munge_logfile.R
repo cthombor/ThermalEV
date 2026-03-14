@@ -39,11 +39,22 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
     tbl <- read_csv(
       logfilpath,
       name_repair = "unique",
-      col_types = cols(`Date/Time` = col_datetime(
-        ifelse(USonian_dates, "%m/%d/%Y%.%H:%M:%S", "%d/%m/%Y%.%H:%M:%S")
-      )),
+      col_types = cols(
+        `Date/Time` = col_datetime(
+          ifelse(USonian_dates, "%m/%d/%Y%.%H:%M:%S", "%d/%m/%Y%.%H:%M:%S")
+        ),
+        `12v Bat Amps` = col_character(),
+        `GPS Status` = col_character()
+      ),
       show_col_types = FALSE
     )
+    # hacking on the occasional "na" or 0 in a LeafSpy csv file
+    tbl <- tbl |> mutate(`12v Bat Amps` =
+                           ifelse(`12v Bat Amps` == "na",
+                                  NA,
+                                  suppressWarnings(
+                                    as.double(`12v Bat Amps`)))
+     )
   }
 
   #todo: sanity-check any csv, to assure that it is fit for purpose

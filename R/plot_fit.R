@@ -3,16 +3,23 @@
 #' #todo: dispatch through generic plot()
 #'
 #' @param m
+#' @param from_idx starting index in thmodel
+#' @param to_idx ending index in thmodel
 #'
 #' @returns an Environment
 #' @export
 #'
 #' @examples
 #' plot_fit(predict_temp())
+#' plot_fit(predict_temp(), 1, 10)
 #' plot_fit(fit_model())
-plot_fit <- function(m)
+plot_fit <- function(m, from_idx=NULL, to_idx=NULL)
 {
+  from_idx <- ifelse(is.null(from_idx), 1, from_idx)
+  to_idx <- ifelse(is.null(to_idx), nrow(m$logdata), to_idx)
+
   pd <- m$logdata |>
+    slice(from_idx:to_idx) |>
     mutate(charging_kW =
              smooth(
                ifelse(pack_amps > 0, 0, -pack_amps * pack_volts)) / 1000,
