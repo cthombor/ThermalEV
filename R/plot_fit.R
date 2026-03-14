@@ -3,22 +3,42 @@
 #' #todo: dispatch through generic plot()
 #'
 #' @param m
-#' @param from_idx starting index in thmodel
-#' @param to_idx ending index in thmodel
+#' @param from_date starting date/time
+#' @param to_date ending date/time
+#' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
+#' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
 #'
 #' @returns an Environment
 #' @export
 #'
 #' @examples
 #' plot_fit(predict_temp())
-#' plot_fit(predict_temp(), 1, 10)
+#' plot_fit(predict_temp(), to_idx = 10)
+#' plot_fit(predict_temp(), to_date = "2026-01-26 11:00")
 #' plot_fit(fit_model())
-plot_fit <- function(m, from_idx=NULL, to_idx=NULL)
+plot_fit <- function(m,
+                     from_date = NULL,
+                     to_date = NULL,
+                     from_idx = NULL,
+                     to_idx = NULL
+)
 {
-  from_idx <- ifelse(is.null(from_idx), 1, from_idx)
-  to_idx <- ifelse(is.null(to_idx), nrow(m$logdata), to_idx)
-
-  pd <- m$logdata |>
+  plotdata <- m$logdata |> arrange(date_time)
+  # curiously, xts insists on UTC for stored dates & times
+  from_idx <- ifelse(is.null(from_date),
+                     ifelse(is.null(from_idx), 1, from_idx),
+                     dplyr::first(which(
+                       plotdata$date_time >= as.POSIXct(from_date, tz = "UTC")
+                     )))
+  to_idx <- ifelse(is.null(to_date),
+                   ifelse(is.null(to_idx), nrow(m$logdata), to_idx),
+                   dplyr::last(which(
+                     plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
+                   )))
+  if (is.null(from_idx) || is.null(to_idx) || from_idx > to_idx) {
+    warning("No data to plot!")
+  }
+  pd <- plotdata |>
     slice(from_idx:to_idx) |>
     mutate(charging_kW =
              smooth(
@@ -40,6 +60,7 @@ plot_fit <- function(m, from_idx=NULL, to_idx=NULL)
       type = "p",
       pch = 1,
       main.timespan = FALSE,
+      format.labels = "%y-%m-%d %H:%M",
       main = paste0(
         m$name,
         ": r = ",
