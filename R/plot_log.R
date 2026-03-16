@@ -73,7 +73,7 @@ plot_log <- function(m,
       select(date_time,
              'distance/100',
              speed,
-             'elv/100',
+             'elv/10',
              SOC
       ) |>
       as.xts()
