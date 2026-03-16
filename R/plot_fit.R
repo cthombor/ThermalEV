@@ -45,14 +45,16 @@ plot_fit <- function(m,
                ifelse(pack_amps > 0, 0, -pack_amps * pack_volts)) / 1000,
            discharge_kW =
              smooth(
-               ifelse(pack_amps > 0, pack_amps * pack_volts, 0)) / 1000
+               ifelse(pack_amps > 0, pack_amps * pack_volts, 0)) / 1000,
+           `AC power/10` = est_pwr_a_c_50w * 5
            ) |>
     select(date_time,
            pack_avg_temp,
            pred_pack_avg_temp,
            ambient,
            charging_kW,
-           discharge_kW) |>
+           discharge_kW,
+           `AC power/10`) |>
     as.xts()
   pd |>
     plot(

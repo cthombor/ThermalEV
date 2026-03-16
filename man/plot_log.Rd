@@ -4,10 +4,18 @@
 \alias{plot_log}
 \title{plot_log: plots distance, elevation, speed, SOC; geolocates in title}
 \usage{
-plot_log(m)
+plot_log(m, from_date = NULL, to_date = NULL, from_idx = NULL, to_idx = NULL)
 }
 \arguments{
 \item{m}{a thmodel}
+
+\item{from_date}{starting date/time}
+
+\item{to_date}{ending date/time}
+
+\item{from_idx}{starting index in thmodel, ignored if !is.null(from_date)}
+
+\item{to_idx}{ending index in thmodel, ignored if !is.null(to_date)}
 }
 \value{
 an Environment
@@ -17,4 +25,5 @@ plot_log: plots distance, elevation, speed, SOC; geolocates in title
 }
 \examples{
 plot_log(predict_temp())
+plot_log(predict_temp(), 1, 10)
 }

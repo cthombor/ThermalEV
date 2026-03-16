@@ -48,8 +48,7 @@ plot_log <- function(m,
            'distance/100' = distance / 100,
            speed = smooth(speed),
            'elv/10' = smooth(elv) / 10,
-           SOC = soc / 10000,
-
+           SOC = soc / 10000
     )
   if (max(x$distance, na.rm = TRUE) < 150) {
     x <- x |>
@@ -74,7 +73,7 @@ plot_log <- function(m,
       select(date_time,
              'distance/100',
              speed,
-             'elv/10',
+             'elv/100',
              SOC
       ) |>
       as.xts()

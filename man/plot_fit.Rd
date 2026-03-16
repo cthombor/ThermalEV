@@ -4,10 +4,16 @@
 \alias{plot_fit}
 \title{Plot pack temp, predicted pack temp, ambient temp, kW (smoothed)}
 \usage{
-plot_fit(m)
+plot_fit(m, from_date = NULL, to_date = NULL, from_idx = NULL, to_idx = NULL)
 }
 \arguments{
-\item{m}{}
+\item{from_date}{starting date/time}
+
+\item{to_date}{ending date/time}
+
+\item{from_idx}{starting index in thmodel, ignored if !is.null(from_date)}
+
+\item{to_idx}{ending index in thmodel, ignored if !is.null(to_date)}
 }
 \value{
 an Environment
@@ -17,5 +23,7 @@ an Environment
 }
 \examples{
 plot_fit(predict_temp())
+plot_fit(predict_temp(), to_idx = 10)
+plot_fit(predict_temp(), to_date = "2026-01-26 11:00")
 plot_fit(fit_model())
 }
