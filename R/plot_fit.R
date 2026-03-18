@@ -2,7 +2,7 @@
 #'
 #' #todo: dispatch through generic plot()
 #'
-#' @param m
+#' @param m a thmodel, with predictions
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)

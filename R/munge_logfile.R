@@ -6,7 +6,8 @@
 #' @param logfilnm  name of logfile to be interpreted
 #' @param logfildir directory of csv logfile, optional, default is "data-raw"
 #' @param logname friendly and informative name for this logfile, optional
-#' @param USonian_dates TRUE: %m/%d/%y parsing; FALSE: %d/%m/%y parsing
+#' @param USonian_dates TRUE: %m\/%d\/%y parsing; FALSE: %d\/%m\/%y parsing
+#'
 #' @returns thmodel
 #' @export
 #'

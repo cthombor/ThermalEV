@@ -21,7 +21,7 @@ munge_logfile(
 
 \item{logname}{friendly and informative name for this logfile, optional}
 
-\item{USonian_dates}{TRUE: %m/%d/%y parsing; FALSE: %d/%m/%y parsing}
+\item{USonian_dates}{TRUE: %m\/%d\/%y parsing; FALSE: %d\/%m\/%y parsing}
 }
 \value{
 thmodel

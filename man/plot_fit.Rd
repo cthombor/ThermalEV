@@ -7,6 +7,8 @@
 plot_fit(m, from_date = NULL, to_date = NULL, from_idx = NULL, to_idx = NULL)
 }
 \arguments{
+\item{m}{a thmodel, with predictions}
+
 \item{from_date}{starting date/time}
 
 \item{to_date}{ending date/time}
