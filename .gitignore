@@ -5,11 +5,13 @@
 .DS_Store
 .quarto
 /data-raw/*.csv
+/data-raw/eNV200ac50kWh/*
 /data-raw/eNV200noac50kWh/*
 /data-raw/2019
 /data-raw/2021
 /data-raw/2024
-/data/eNV200noac50kWh.rda
 /data-raw/eNV200ac24kWh_2025/*
 /data/eNV200ac24kWh_2025.rda
+/data/eNV200noac50kWh.rda
+/data/eNV200ac50kWh.rda
 /images

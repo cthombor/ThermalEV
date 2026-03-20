@@ -8,6 +8,7 @@
 #' 'munge_logfile()'
 #'
 #' @param logfildir path to directory containing csv files
+#' @param USonian_dates TRUE for mdy, FALSE for dmy
 #' @param name friendly name for this thmodel
 #'
 #' @returns a thmodel
@@ -17,7 +18,8 @@
 #' m <- thmodel_from_directory()
 
 thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
-                                   name = NULL) {
+                                   name = NULL,
+                                   USonian_dates = FALSE) {
 
   filnm_list <- list.files(here::here(logfildir))
 
@@ -26,7 +28,8 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
     x <- filnm_list[[i]]
     m_list[[i]] <- munge_logfile(logfildir = logfildir,
                   logfilnm = x,
-                  logname = x)
+                  logname = x,
+                  USonian_dates = USonian_dates)
   }
   tbl_list <- lapply(m_list, function(x) x$logdata)
 

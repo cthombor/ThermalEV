@@ -25,3 +25,10 @@
 #'
 #' @source {thmodel} R package.
 "eNV200ac24kWh_2025"
+
+#' eNV200ac50kWh: a thmodel object, with provenance, of logs from the
+#' fully-functional 50kWh upgrade.  The fields are as defined in thmodel.R.
+#' @format A thmodel object.
+#'
+#' @source {thmodel} R package.
+"eNV200ac50kWh"

@@ -102,6 +102,8 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
     longt <- ft(select(tbl, long)[[1]])
     tbl <- tbl |> mutate(lat = latt, long = longt)
 
+    #todo: avoid munging the file if there's a parsing error on the timestamps
+
     #write the munged file to disk
     write_csv(tbl, logfilpath)
   }
