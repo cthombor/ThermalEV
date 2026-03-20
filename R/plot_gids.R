@@ -1,6 +1,6 @@
 #' plot_gids: scatterplot of SOC and pack_volts v gids, also a timeseries plot
 #'
-#' @param m a thmodel
+#' @param m a thmodel with temperature predictions
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
@@ -14,7 +14,7 @@
 #'
 #' @examples
 #' plot_gids(eNV200ac24kWh_2025)
-#' plot_gids(eNV200ac24kWh_2025, min_soc = 25)
+#' plot_gids(eNV200ac24kWh_2025, min_soc = 70)
 plot_gids <- function(m,
                      from_date = NULL,
                      to_date = NULL,
