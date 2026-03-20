@@ -1,27 +1,32 @@
-#' plot_gids: scatterplot of pack_volts v scaled gids
+#' plot_volts: scatterplot of pack_volts v scaled gids
 #'
-#' @param m a thmodel
+#' @param m a thmodel with predictions (requires m$pack_avg_temp)
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
 #' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
+#' @param min_sgids high-pass filter on scaled gids (to examine non-linearity)
 #' @param max_sgids low-pass filter on scaled gids (to examine non-linearity)
+#' @param temp_colours TRUE adds colours for temps, FALSE for pack_amps
 #'
 #' @returns an Environment
 #' @export
 #'
 #' @examples
-#' plot_volts(eNV200ac24kWh_2025)
-#' plot_volts(eNV200ac24kWh_2025, min_sgids = 25)
+#' plot_volts(predict_temp(eNV200ac24kWh_2025))
+#' plot_volts(predict_temp(eNV200ac24kWh_2025), min_sgids = 25)
 plot_volts <- function(m,
                      from_date = NULL,
                      to_date = NULL,
                      from_idx = NULL,
                      to_idx = NULL,
-                     max_sgids = NULL)
+                     min_sgids = NULL,
+                     max_sgids = NULL,
+                     temp_colours = TRUE)
 {
   pd <- m$logdata |>
-    select(date_time, gids, soc, soh, pack_volts) |>
+    select(date_time, gids, soc, soh, pack_volts, pack_avg_temp,
+           pack_amps) |>
     mutate(gids_scaled = gids / (soh / 100),
            soc = soc / 1e4) |>
     mutate(pack_volts = ifelse(pack_volts == 0, NA, pack_volts)) |>
@@ -40,16 +45,27 @@ plot_volts <- function(m,
                    dplyr::last(which(
                      plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
-  if (is.null(from_idx) || is.null(to_idx) || from_idx > to_idx) {
-    warning("No data to plot!")
-  }
 
   pd <- pd |> slice(from_idx:to_idx)
   if (!is.null(max_sgids))
     pd <- pd[(pd$gids_scaled <= max_sgids), ]
+  if (!is.null(min_sgids))
+    pd <- pd[(pd$gids_scaled >= min_sgids), ]
 
-  ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
-    geom_point() +
-    labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx))
+  if (nrow(pd) == 0) {
+    warning("No data to plot!")
+  }
+
+  if (temp_colours) {
+    ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
+      theme(palette.colour.continuous = "Okabe-Ito") +
+      labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
+      geom_point(aes(colour = pack_avg_temp))
+  } else {
+    ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
+      theme(palette.colour.continuous = "Okabe-Ito") +
+      labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
+      geom_point(aes(colour = pack_amps))
+  }
 
 }

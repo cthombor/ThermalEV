@@ -7,6 +7,21 @@
 # Sys.setenv(TZ = Sys.timezone()) # avoid warnings?
 # options(xts_check_TZ = FALSE) # disable warnings?
 
+# cheesy avoidance of lm() in plot_gids:
+pd <- pd |> arrange(soc)
+if (is.null(slope_start))
+  slope_start = 0
+i1 <- which.min(pd$soc >= slope_start)
+x1 <- pd$gids_scaled[i1]
+y1 <- pd$soc[i1]
+i2 <- which.max(pd$soc)
+x2 <- pd$gids_scaled[i2]
+y2 <- pd$soc[i2]
+soc_slope <- (y2 - y1) / (x2 - x1)
+soc_intercept <- y2 - x2 * soc_slope
+print(paste("SOC/scaled_gid =", round(soc_slope, 4),
+            "; SOC intercept =", round(soc_intercept, 2)))
+
 
 # q for Hadley: is there an efficient way to do recursive filtering in the
 # tidyverse?  I suspect not, as it'd be clumsy and still not be very general.
