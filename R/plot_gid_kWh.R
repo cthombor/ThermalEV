@@ -18,7 +18,8 @@ plot_gid_kWh <- function(m,
                      to_idx = NULL)
 {
   pd <- m$logdata |>
-    select(date_time, gids, soc, soh, a_hr, pack_volts, pack_amps, delta_t) |>
+    select(date_time, gids, soc, soh, a_hr, pack_volts, pack_amps, delta_t,
+           pack_avg_temp) |>
     mutate(
       grp_num = cumsum(is.na(delta_t)),
       'Volts - 340' = pack_volts - 340,
@@ -62,13 +63,16 @@ plot_gid_kWh <- function(m,
 
   pred_kWh <- ifelse(is.na(pd$delta_t), NA, pd$cumsum_delta_kWh)
   scaled_gid <- pd$kWh_remaining
-  lmf <- lm(pred_kWh ~ scaled_gid)
+  lmf <- lm(pred_kWh ~ 0 + scaled_gid)
   print(summary(lmf))
 
   pdts <- pd |>
     select(date_time,
-           cumsum_delta_kWh, kWh_remaining, 'Volts - 340') |>
+           cumsum_delta_kWh, kWh_remaining, 'Volts - 340',
+           pack_avg_temp, soc) |>
     as.xts()
-  plot(pdts, type = "p", legend.loc = "top")
+  plot(pdts, type = "p", legend.loc = "top", main =
+         paste0(m$name, ": ",
+                round(lmf$coefficients[1], 4)))
 
 }

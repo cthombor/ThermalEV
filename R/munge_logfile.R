@@ -43,18 +43,11 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
         `Date/Time` = col_datetime(
           ifelse(USonian_dates, "%m/%d/%Y%.%H:%M:%S", "%d/%m/%Y%.%H:%M:%S")
         ),
-        `12v Bat Amps` = col_character(),
+        `12v Bat Amps` = col_character(), # to cope with the occasional "na"
         `GPS Status` = col_character()
       ),
       show_col_types = FALSE
     )
-    # hacking on the occasional "na" or 0 in a LeafSpy csv file
-    tbl <- tbl |> mutate(`12v Bat Amps` =
-                           ifelse(`12v Bat Amps` == "na",
-                                  NA,
-                                  suppressWarnings(
-                                    as.double(`12v Bat Amps`)))
-     )
   }
 
   #todo: sanity-check any csv, to assure that it is fit for purpose
@@ -62,35 +55,36 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
   #setup, might produce incompatible csv files.
 
   tbl <- tbl |>
+    mutate(x12v_bat_amps =
+             ifelse(x12v_bat_amps == "na",
+                    NA,
+                    suppressWarnings(as.double(x12v_bat_amps)))) |>
 
-    #n.b. there may be multiple Debug cols in LeafSpy logs, causing
-    #annoying warning messages when they're imported into the tidyverse
+    # n.b. there may be multiple Debug cols in LeafSpy logs, causing
+    # annoying warning messages when they're imported into the tidyverse
     select(!starts_with("Debug")) |>
-
     janitor::clean_names() |>
-
-    #n.b. LeafSpy writes "none" in the odo_km field, when the car is
-    #not in Drive mode. These entries are interpreted as 0 by read_csv, but
-    #NA is more accurate.
+    # n.b. LeafSpy writes "none" in the odo_km field, when the car is
+    # not in Drive mode. These entries are interpreted as 0 by read_csv, but
+    # NA is more accurate.
     mutate(odo_km = ifelse(odo_km == 0, NA, odo_km)) |>
-
     arrange(date_time)
 
   if (!already_munged) {
-    #n.b. publishing a VIN is hazardous, because it's sometimes used as a
-    #self-authenticating identifier ("security by obscurity") and also
-    #because it is PII of no relevance to the analysis.
+    # n.b. publishing a VIN is hazardous, because it's sometimes used as a
+    # self-authenticating identifier ("security by obscurity") and also
+    # because it is PII of no relevance to the analysis.
 
     #defensive guard: the user may have manually removed VIN
     if ("VIN" %in% names(tbl)) {
       tbl <- tbl |> select(!VIN)
     }
 
-    #todo: mutate to a securely hashed VIN. ?keyed to what secret?
+    # todo: could mutate to a securely hashed VIN, but keyed to what secret?
 
-    #n.b. publishing high-resolution lat/long data is a privacy
-    #hazard which can be mitigated by munging, without impairing
-    #the accuracy of a thermal model.
+    # n.b. publishing high-resolution lat/long data is a privacy
+    # hazard which can be mitigated by munging, without impairing
+    # the accuracy of a thermal model.
     latv <- select(tbl, lat)
     regexpv <- rep("[.]", length(latv))
     # we retain one decimal point of accuracy in the minutes
