@@ -4,12 +4,18 @@
 \alias{thmodel_from_directory}
 \title{Utility to import an entire directory of csv files into a thmodel}
 \usage{
-thmodel_from_directory(logfildir = "data-raw/eNV200noac50kWh", name = NULL)
+thmodel_from_directory(
+  logfildir = "data-raw/eNV200noac50kWh",
+  name = NULL,
+  USonian_dates = FALSE
+)
 }
 \arguments{
 \item{logfildir}{path to directory containing csv files}
 
 \item{name}{friendly name for this thmodel}
+
+\item{USonian_dates}{TRUE for mdy, FALSE for dmy}
 }
 \value{
 a thmodel

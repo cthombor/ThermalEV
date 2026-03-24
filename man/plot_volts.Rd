@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_volts.R
 \name{plot_volts}
 \alias{plot_volts}
-\title{plot_gids: scatterplot of pack_volts v scaled gids}
+\title{plot_volts: scatterplot of pack_volts v scaled gids}
 \usage{
 plot_volts(
   m,
@@ -10,11 +10,13 @@ plot_volts(
   to_date = NULL,
   from_idx = NULL,
   to_idx = NULL,
-  max_soc = NULL
+  min_sgids = NULL,
+  max_sgids = NULL,
+  temp_colours = TRUE
 )
 }
 \arguments{
-\item{m}{a thmodel}
+\item{m}{a thmodel with predictions (requires m$pack_avg_temp)}
 
 \item{from_date}{starting date/time}
 
@@ -24,15 +26,19 @@ plot_volts(
 
 \item{to_idx}{ending index in thmodel, ignored if !is.null(to_date)}
 
+\item{min_sgids}{high-pass filter on scaled gids (to examine non-linearity)}
+
 \item{max_sgids}{low-pass filter on scaled gids (to examine non-linearity)}
+
+\item{temp_colours}{TRUE adds colours for temps, FALSE for pack_amps}
 }
 \value{
 an Environment
 }
 \description{
-plot_gids: scatterplot of pack_volts v scaled gids
+plot_volts: scatterplot of pack_volts v scaled gids
 }
 \examples{
-plot_volts(eNV200ac24kWh_2025)
-plot_volts(eNV200ac24kWh_2025, min_sgids = 25)
+plot_volts(predict_temp(eNV200ac24kWh_2025))
+plot_volts(predict_temp(eNV200ac24kWh_2025), min_sgids = 25)
 }
