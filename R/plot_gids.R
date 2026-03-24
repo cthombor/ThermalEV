@@ -1,4 +1,4 @@
-#' plot_gids: scatterplot of SOC and pack_volts v gids, also a timeseries plot
+#' plot_gids: scatterplot of SOC and pack_volts v gids
 #'
 #' @param m a thmodel with temperature predictions
 #' @param from_date starting date/time
