@@ -21,17 +21,32 @@ plot_gid_kWh <- function(m,
 {
   pd <- m$logdata |>
     select(date_time, gids, soc, soh, a_hr, pack_volts, pack_amps, delta_t,
-           pack_avg_temp) |>
+           pack_avg_temp)
+
+  # it's impossible to add multiple gids to a pack in a 15s interval; but gids
+  # are sometimes recalibrated (e.g. when the SOC is very low)
+  wonky_data <- (abs(pd$gids - lag(pd$gids)) > 1) & (!is.na(pd$delta_t))
+  wct <- sum(wonky_data, na.rm = TRUE)
+  if (wct > 0) {
+    pd <- pd |>
+      mutate(delta_t = ifelse(wonky_data, NA, delta_t))
+  }
+
+  pd <- pd |>
     mutate(
       grp_num = cumsum(is.na(delta_t)),
       adj_delta_t = ifelse(is.na(delta_t), 15, delta_t),
+      # avoid difficulty with NA in a cumsum()
+      pack_volts = ifelse(is.na(pack_volts),
+                          max(lead(pack_volts), lag(pack_volts), na.rm = TRUE),
+                          pack_volts),
       'Volts - 340' = pack_volts - 340,
-      kW = pack_volts * pack_amps / 1000,
       reported_soc = soc / 1e4,
       a_hr = a_hr / 1e4,
       kWh_from_gids = Wh_per_gid * gids / 1000,
     ) |>
     mutate(
+      kW = pack_volts * pack_amps / 1000,
       delta_kWh = - kW * adj_delta_t / 3600,
     ) |>
     mutate( # initialise the kWh accumulator for each group
@@ -61,6 +76,15 @@ plot_gid_kWh <- function(m,
     mutate(pred_kWh = ifelse(is.na(delta_t),
            NA,
            cumsum_delta_kWh))
+
+  wonky_data <- wonky_data[from_idx:to_idx]
+  wct <- sum(wonky_data, na.rm = TRUE)
+  warning(
+    wct,
+    " wonky/recalibrated gid readings will restart kWh estimations.",
+    " First: ",
+    pd$date_time[first(which(wonky_data))]
+  )
 
   if (nrow(pd) == 0) {
     warning("No data to plot!")
