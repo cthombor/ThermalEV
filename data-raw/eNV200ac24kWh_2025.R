@@ -3,6 +3,7 @@
 
 eNV200ac24kWh_2025 <- thmodel_from_directory(
   logfildir = "data-raw/eNV200ac24kWh_2025",
-  name = "ac24kWh_2025")
+  name = "ac24kWh_2025",
+  capacity = 24)
 
 usethis::use_data(eNV200ac24kWh_2025, overwrite = TRUE)

@@ -11,12 +11,10 @@
 new_thmodel <- function() {
   m <-
     list(
-      name = "",
-      # user-friendly name, used for titles of plots
-      filnm = "",
-      # provenance file (a csv filnm)
-      fildir = "",
-      # provenance location (relative to a homedir), no trailing "/"
+      name = "", # user-friendly name, used for titles of plots
+      capacity = NULL,
+      filnm = "", # provenance (a csv filnm)
+      fildir = "", # provenance (dir relative to a homedir), no trailing "/"
       modified.first.time = now(), # named as in xts
       modified.last.time = now(),
       parameters = list(),

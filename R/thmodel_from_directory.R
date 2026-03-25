@@ -10,6 +10,7 @@
 #' @param logfildir path to directory containing csv files
 #' @param USonian_dates TRUE for mdy, FALSE for dmy
 #' @param name friendly name for this thmodel
+#' @param capacity nominal capacity of the pack, in kWh
 #'
 #' @returns a thmodel
 #' @export
@@ -19,7 +20,8 @@
 
 thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
                                    name = NULL,
-                                   USonian_dates = FALSE) {
+                                   USonian_dates = FALSE,
+                                   capacity = NULL) {
 
   filnm_list <- list.files(here::here(logfildir))
 
@@ -41,8 +43,8 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
   m$logdata <- t
   m$filnm <- ""
   m$name <- ifelse(is.null(name), cname, name)
+  m$capacity <- capacity
   m$fildir <- logfildir
-
   return(m)
 }
 

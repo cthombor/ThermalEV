@@ -17,8 +17,6 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
                           logfildir = "data-raw",
                           logname = NULL,
                           USonian_dates = FALSE) {
-  #todo: ? default logfildir to "extdata" ? See https://r-pkgs.org/data.html
-
   # read a csv file, create a new thmodel object, possibly write a munged csv
   logfilpath <- paste0(here::here(logfildir), "/", logfilnm)
 
@@ -44,30 +42,39 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
           ifelse(USonian_dates, "%m/%d/%Y%.%H:%M:%S", "%d/%m/%Y%.%H:%M:%S")
         ),
         `12v Bat Amps` = col_character(), # to cope with the occasional "na"
-        `GPS Status` = col_character()
+        `GPS Status` = col_character() # four bits, in hex format
       ),
       show_col_types = FALSE
     )
   }
 
-  #todo: sanity-check any csv, to assure that it is fit for purpose
-  #as input to our code.  Any rev to LeafSpy, or any difference in its
-  #setup, might produce incompatible csv files.
+  zct <- sum(tbl$odo_km == 0, na.rm = TRUE)
+  if (zct > 0)
+    warning(paste0(logfilnm, ": ", zct, " zeros in the Odo column."))
+  zct <- sum(tbl$gids == 0, na.rm = TRUE)
+  if (zct > 0)
+    warning(paste0(logfilnm, ": ", zct, " zeros in the GIDs column."))
+  zct <- sum(tbl$pack_volts == 0, na.rm = TRUE)
+  if (zct > 0)
+    warning(paste0(logfilnm, ": ", zct, " zeros in the Pack Volts column."))
 
   tbl <- tbl |>
-    mutate(x12v_bat_amps =
-             ifelse(x12v_bat_amps == "na",
-                    NA,
-                    suppressWarnings(as.double(x12v_bat_amps)))) |>
 
-    # n.b. there may be multiple Debug cols in LeafSpy logs, causing
+    # n.b. there are multiple Debug cols in my LeafSpy logs, causing
     # annoying warning messages when they're imported into the tidyverse
     select(!starts_with("Debug")) |>
     janitor::clean_names() |>
     # n.b. LeafSpy writes "none" in the odo_km field, when the car is
     # not in Drive mode. These entries are interpreted as 0 by read_csv, but
-    # NA is more accurate.
-    mutate(odo_km = ifelse(odo_km == 0, NA, odo_km)) |>
+    # NA is more accurate.  And: there's an occasional spurious 0 in other columns.
+    mutate(
+      odo_km = ifelse(odo_km == 0, NA, odo_km),
+      gids = ifelse(gids == 0, NA, gids),
+      pack_volts = ifelse(pack_volts == 0, NA, pack_volts),
+      x12v_bat_amps =
+        ifelse(x12v_bat_amps == "na", NA,
+               suppressWarnings(as.double(x12v_bat_amps)))
+    ) |>
     arrange(date_time)
 
   if (!already_munged) {
@@ -106,11 +113,5 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
   m$filnm <- logfilnm
   m$fildir <- logfildir
   m$logdata <- tbl
-
-  #todo: consider writing m to data/name.rda, to optimise reloads of
-  #csv from data-raw/. Downside: the user must specify "data" as the logfildir
-  #in future, to benefit from this optimisation. Downside: this might cause
-  #confusion about versioning of thmodel objects and csv files.
-
   return(m)
 }
