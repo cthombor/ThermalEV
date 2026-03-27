@@ -40,6 +40,12 @@ plot_fit <- function(m,
   }
   pd <- plotdata |>
     slice(from_idx:to_idx) |>
+    mutate(pack_volts = ifelse(is.na(pack_volts),
+                           median(dplyr::lag(pack_volts),
+                                dplyr::lead(pack_volts),
+                                na.rm=TRUE),
+                           pack_volts)
+    ) |>
     mutate(charging_kW =
              smooth(
                ifelse(pack_amps > 0, 0, -pack_amps * pack_volts)) / 1000,

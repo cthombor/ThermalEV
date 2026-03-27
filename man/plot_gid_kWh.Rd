@@ -6,6 +6,7 @@
 \usage{
 plot_gid_kWh(
   m,
+  Wh_per_gid = 80,
   from_date = NULL,
   to_date = NULL,
   from_idx = NULL,
@@ -14,6 +15,8 @@ plot_gid_kWh(
 }
 \arguments{
 \item{m}{a thmodel with temperature preductions}
+
+\item{Wh_per_gid}{adjustable, for empirical confirmation}
 
 \item{from_date}{starting date/time}
 

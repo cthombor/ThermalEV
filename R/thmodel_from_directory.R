@@ -28,6 +28,7 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
   m_list <- vector("list", length = length(filnm_list))
   for (i in seq(length(filnm_list))) {
     x <- filnm_list[[i]]
+    print(paste(i, x, "..."))
     m_list[[i]] <- munge_logfile(logfildir = logfildir,
                   logfilnm = x,
                   logname = x,
@@ -40,7 +41,7 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
   cname <- janitor::make_clean_names(logfildir, case = "none")
 
   m <- new_thmodel()
-  m$logdata <- t
+  m$logdata <- arrange(t, date_time)
   m$filnm <- ""
   m$name <- ifelse(is.null(name), cname, name)
   m$capacity <- capacity
