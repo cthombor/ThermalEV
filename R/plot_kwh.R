@@ -1,6 +1,7 @@
-#' plot_kwh: study gids -- do they report kWh or Ah?
+#' plot_soc_gid: study soc v gid/soh
 #'
 #' @param m a thmodel
+#' @param suppress_outliers if TRUE, won't plot the reported outliers
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
@@ -14,7 +15,8 @@
 #' @examples
 #' plot_kWh(eNV200ac24kWh_2025)
 #' plot_kWh(eNV200ac24kWh_2025, min_soc = 70)
-plot_kWh <- function(m,
+plot_soc_gid <- function(m,
+                     suppress_outliers = TRUE,
                      from_date = NULL,
                      to_date = NULL,
                      from_idx = NULL,
@@ -56,13 +58,13 @@ plot_kWh <- function(m,
 
   print("Ratio of gids/soh to soc:")
   print(summary(pd$gids_ratio))
-  meanrat <- mean(pd$gids_ratio)
-  outliers <- abs(meanrat * pd$soc - pd$gids_scaled) > 50
-  if (any(outliers))
-    warning(paste(c("Outliers at index #",
-                    which(outliers),
-                    ifelse(suppress_outliers, "not plotted", "")),
-                  collapse = " "))
+  medianrat <- median(pd$gids_ratio, na.rm=TRUE)
+  outliers <- abs(medianrat * pd$soc - pd$gids_scaled) > 50
+  if (any(outliers)) {
+    warning(paste0("Outliers at index #",
+                   paste0(which(outliers), collapse=", "),
+                   ifelse(suppress_outliers, " not plotted", "")))
+  }
   if (suppress_outliers) pd <- pd[!outliers, ]
 
   # dead code, maybe useful some day to visualise scaled gids,

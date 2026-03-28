@@ -1,4 +1,4 @@
-#' plot_gid_kWh: explore kWh v gid
+#' plot_explore_gid: explore soc v gid/soh
 #'
 #' @param m a thmodel with temperature preductions
 #' @param Wh_per_gid adjustable, for empirical confirmation
@@ -11,8 +11,8 @@
 #' @export
 #'
 #' @examples
-#' plot_gid_kWh(predict_temp(eNV200ac24kWh_2025))
-plot_gid_kWh <- function(m,
+#' plot_explore_gid(predict_temp(eNV200ac24kWh_2025))
+plot_explore_gid <- function(m,
                          Wh_per_gid = 80,
                          from_date = NULL,
                          to_date = NULL,
