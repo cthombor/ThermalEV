@@ -31,9 +31,7 @@ plot_log <- function(m,
                    dplyr::last(which(
                      plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
-  if (is.null(from_idx) || is.null(to_idx) || from_idx > to_idx) {
-    warning("No data to plot!")
-  }
+  stopifnot(!is.null(from_idx) && !is.null(to_idx) && from_idx < to_idx)
 
   plotdata <- plotdata |> slice(from_idx:to_idx)
 

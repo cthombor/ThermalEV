@@ -7,7 +7,7 @@
 #' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
 #' @param min_soc high-pass filter on soc (to examine non-linearity)
 #' @param max_soc low-pass filter on soc (to examine non-linearity)
-#' @param suppress_outliers TRUE by default: outliers are not plotted
+#' @param suppress_outliers FALSE by default: outliers are not plotted
 #'
 #' @returns an Environment
 #' @export
@@ -22,7 +22,7 @@ plot_gids <- function(m,
                      to_idx = NULL,
                      min_soc = NULL,
                      max_soc = NULL,
-                     suppress_outliers = TRUE)
+                     suppress_outliers = FALSE)
 {
   pd <- m$logdata |>
     select(date_time, gids, soc, soh, pack_volts, a_hr, pack_amps) |>
@@ -38,12 +38,12 @@ plot_gids <- function(m,
   from_idx <- ifelse(is.null(from_date),
                      ifelse(is.null(from_idx), 1, from_idx),
                      dplyr::first(which(
-                       plotdata$date_time >= as.POSIXct(from_date, tz = "UTC")
+                       pd$date_time >= as.POSIXct(from_date, tz = "UTC")
                      )))
   to_idx <- ifelse(is.null(to_date),
                    ifelse(is.null(to_idx), nrow(m$logdata), to_idx),
                    dplyr::last(which(
-                     plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
+                     pd$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
 
   pd <- pd |> slice(from_idx:to_idx)
@@ -58,7 +58,7 @@ plot_gids <- function(m,
 
   print("Ratio of gids/soh to soc:")
   print(summary(pd$gids_ratio))
-  meanrat <- mean(pd$gids_ratio)
+  meanrat <- mean(pd$gids_ratio, na.rm=TRUE)
   outliers <- abs(meanrat * pd$soc - pd$gids_scaled) > 50
   if (any(outliers))
     warning(paste(c("Outliers at index #",

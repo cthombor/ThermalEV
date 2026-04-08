@@ -22,7 +22,16 @@ plot_gid_ahr <- function(m,
                      to_idx = NULL)
 {
   pd <- m$logdata |>
-    select(date_time, gids, soc, soh, a_hr, pack_volts, pack_amps, delta_t) |>
+    select(date_time,
+           gids,
+           soc,
+           soh,
+           a_hr,
+           pack_volts,
+           pack_amps,
+           pack_avg_temp,
+           cp_m_v_diff,
+           delta_t) |>
     mutate(
       gids_scaled = gids / (soh / 100),
       'Volts - 340' = pack_volts - 340,
@@ -57,15 +66,27 @@ plot_gid_ahr <- function(m,
                      pd$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
 
-  pd <- pd |> slice(from_idx:to_idx)
+  pd <- pd |>
+    slice(from_idx:to_idx) |>
+    mutate('gids * 0.18' = ah_remaining,
+           'LeafSpy soc' = soc)
 
   if (nrow(pd) == 0) {
     warning("No data to plot!")
   }
 
   pdts <- pd |>
-    select(date_time, cumsum_delta_ah, ah_remaining, 'Volts - 340') |>
+    select(date_time,
+           cumsum_delta_ah,
+           'gids * 0.18',
+           'Volts - 340',
+           'LeafSpy soc',
+           pack_avg_temp,
+           cp_m_v_diff) |>
     as.xts()
-  plot(pdts, type = "p", legend.loc = "top")
+  plot(pdts,
+       type = "p",
+       legend.loc = "top",
+       main = m$name)
 
 }
