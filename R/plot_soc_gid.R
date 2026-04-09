@@ -94,12 +94,12 @@ plot_soc_gid <- function(m,
   from_idx <- ifelse(is.null(from_date),
                      ifelse(is.null(from_idx), 1, from_idx),
                      dplyr::first(which(
-                       plotdata$date_time >= as.POSIXct(from_date)
+                       pd$date_time >= as.POSIXct(from_date)
                      )))
   to_idx <- ifelse(is.null(to_date),
                    ifelse(is.null(to_idx), nrow(m$logdata), to_idx),
                    dplyr::last(which(
-                     plotdata$date_time <= as.POSIXct(to_date)
+                     pd$date_time <= as.POSIXct(to_date)
                    )))
   pd <- pd |> slice(from_idx:to_idx)
 
