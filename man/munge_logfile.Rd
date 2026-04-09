@@ -27,10 +27,9 @@ munge_logfile(
 thmodel
 }
 \description{
-Munges a csv to ensure it has no VIN column, has timestamps in ISO format,
-is sorted on these timestamps, and has tidied column names.  Side effect:
-updates this csv file.  Returns a thmodel with the munged csv as its logdata,
-and with provenance fields set.
+Todo: munge the filenm, if it contains information from a VIN.  Perhaps:
+allow the user to specify a pseudoVIN, to retain provenance informmation
+on csv files collected from multiple vehicles.
 }
 \examples{
 m <- munge_logfile()

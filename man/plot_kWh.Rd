@@ -2,20 +2,24 @@
 % Please edit documentation in R/plot_kwh.R
 \name{plot_kWh}
 \alias{plot_kWh}
-\title{plot_kwh: study gids -- do they report kWh or Ah?}
+\title{plot_kWh: explore gid/soh v a numeric integration of pack VA.}
 \usage{
 plot_kWh(
   m,
+  Wh_per_gid = 80,
+  eff_resistance = 500,
   from_date = NULL,
   to_date = NULL,
   from_idx = NULL,
-  to_idx = NULL,
-  min_soc = NULL,
-  max_soc = NULL
+  to_idx = NULL
 )
 }
 \arguments{
-\item{m}{a thmodel}
+\item{m}{a thmodel with temperature preductions}
+
+\item{Wh_per_gid}{adjustable, for empirical confirmation}
+
+\item{eff_resistance}{adjustable, for Joule-heat correction, in milliohms}
 
 \item{from_date}{starting date/time}
 
@@ -24,18 +28,15 @@ plot_kWh(
 \item{from_idx}{starting index in thmodel, ignored if !is.null(from_date)}
 
 \item{to_idx}{ending index in thmodel, ignored if !is.null(to_date)}
-
-\item{min_soc}{high-pass filter on soc (to examine non-linearity)}
-
-\item{max_soc}{low-pass filter on soc (to examine non-linearity)}
 }
 \value{
 an Environment
 }
 \description{
-plot_kwh: study gids -- do they report kWh or Ah?
+ToDo: Nominally, 1 gid/SOH = 80 kWh, but we could estimate this ratio for
+any pack by analysing the evolution of its reported gids with
+a numerical integration of observations of (pack volts)*(pack amps).
 }
 \examples{
-plot_kWh(eNV200ac24kWh_2025)
-plot_kWh(eNV200ac24kWh_2025, min_soc = 70)
+plot_kWh(predict_temp(eNV200ac24kWh_2025))
 }

@@ -12,7 +12,7 @@ plot_volts(
   to_idx = NULL,
   min_sgids = NULL,
   max_sgids = NULL,
-  temp_colours = TRUE
+  temp_colours = FALSE
 )
 }
 \arguments{
@@ -39,6 +39,8 @@ an Environment
 plot_volts: scatterplot of pack_volts v scaled gids
 }
 \examples{
-plot_volts(predict_temp(eNV200ac24kWh_2025))
-plot_volts(predict_temp(eNV200ac24kWh_2025), min_sgids = 25)
+plot_volts(eNV200ac24kWh_2025)
+plot_volts(eNV200ac24kWh_2025, max_sgids = 75)
+plot_volts(eNV200ac24kWh_2025, max_sgids = 75, temp_colours=FALSE)
+plot_volts(eNV200ac24kWh_2025, max_sgids = 75, temp_colours=TRUE)
 }

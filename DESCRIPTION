@@ -1,7 +1,7 @@
 Package: ThermalEV
 Type: Package
 Title: Analyse LeafSpy Logs to Estimate Thermal Parameters of a Nissan Battery
-Version: 0.2.0
+Version: 0.2.1
 Authors@R: c(
     person(
       "Thomborson", "Clark",

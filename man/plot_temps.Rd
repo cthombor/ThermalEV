@@ -4,10 +4,18 @@
 \alias{plot_temps}
 \title{plot_temps: plots temperatures of all sensors, mean temp, and predicted temp}
 \usage{
-plot_temps(m)
+plot_temps(m, from_date = NULL, to_date = NULL, from_idx = NULL, to_idx = NULL)
 }
 \arguments{
-\item{m}{a thmodel}
+\item{m}{a thmodel with temperature predictions}
+
+\item{from_date}{starting date/time}
+
+\item{to_date}{ending date/time}
+
+\item{from_idx}{starting index in thmodel, ignored if !is.null(from_date)}
+
+\item{to_idx}{ending index in thmodel, ignored if !is.null(to_date)}
 }
 \value{
 an Environment
@@ -17,4 +25,5 @@ plot_temps: plots temperatures of all sensors, mean temp, and predicted temp
 }
 \examples{
 plot_temps(predict_temp())
+plot_temps(eNV200ac24kWh_2024, from_date="2024-02-21", to_date="2024-02-22")
 }
