@@ -1,7 +1,12 @@
 #' Munges a csv to ensure it has no VIN column, has timestamps in ISO format,
-#' is sorted on these timestamps, and has tidied column names.  Side effect:
-#' updates this csv file.  Returns a thmodel with the munged csv as its logdata,
-#' and with provenance fields set.
+#' is sorted on these timestamps, has tidied column names.  Warns of zeros
+#' in fields for GID, SOH, or pack volts.
+#'
+#' Side effect: updates this csv file!
+#'
+#' Returns a thmodel with the munged csv as its logdata; with NAs replacing
+#' nonsensical zeros in GID, SOH, and pack volts; and with provenance fields
+#' set.
 #'
 #' Todo: munge the filenm, if it contains information from a VIN.  Perhaps:
 #' allow the user to specify a pseudoVIN, to retain provenance informmation
@@ -108,11 +113,18 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
   zct <- sum(tbl$Gids == 0, na.rm = TRUE)
   if (zct > 0)
     warning(paste0(logfilnm, ": ", zct, " zero",
-                   ifelse(zct>1,"s",""), " in the GIDs column."))
+                   ifelse(zct>1,"s",""),
+                   " in the GIDs column."))
+  zct <- sum(tbl$SOH == 0, na.rm = TRUE)
+  if (zct > 0)
+    warning(paste0(logfilnm, ": ", zct, " zero",
+                   ifelse(zct>1,"s",""),
+                   " in the SOH column."))
   zct <- sum(tbl$'Pack Volts' == 0, na.rm = TRUE)
   if (zct > 0)
     warning(paste0(logfilnm, ": ", zct, " zero",
-                   ifelse(zct>1,"s",""), " in the Pack Volts column."))
+                   ifelse(zct>1,"s",""),
+                   " in the Pack Volts column."))
 
   tbl <- tbl |>
     # Name cleaning: required for entry into the tidyverse.
@@ -121,7 +133,7 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
     # not in Drive mode. These entries are interpreted as 0 by read_csv, but NA
     # is desirable for analysis.  LeafSpy sometimes writes "na" in the 12V Bat
     # Amps field, which we interpret as NA.  There's an occasional spurious 0 in
-    # at least two other columns.
+    # at least three other columns.
 
     # TODO: the x12v_bat_amps repair (below) doesn't work until its name is
     # cleaned by a read_csv "unique-quiet".  The error clears if you re-run
@@ -132,11 +144,14 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
         ifelse(x12v_bat_amps == "na", NA,
                suppressWarnings(as.double(x12v_bat_amps))),
       gids = ifelse(gids == 0, NA, gids),
-      pack_volts = ifelse(pack_volts == 0, NA, pack_volts)
+      pack_volts = ifelse(pack_volts == 0, NA, pack_volts),
+      soh = ifelse(soh == 0, NA, soh)
     )
 
   m <- new_thmodel()
-  m$name <- ifelse(is.null(logname), str_sub(logfilnm, 1, (nchar(logfilnm) - 4)), logname)
+  m$name <- ifelse(is.null(logname),
+                   str_sub(logfilnm, 1, (nchar(logfilnm) - 4)),
+                   logname)
   m$filnm <- logfilnm
   m$fildir <- logfildir
   m$logdata <- tbl
