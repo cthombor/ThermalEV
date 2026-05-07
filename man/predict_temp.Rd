@@ -2,13 +2,15 @@
 % Please edit documentation in R/predict_temp.R
 \name{predict_temp}
 \alias{predict_temp}
-\title{Uses a 3-parameter thermal model to predict temperatures in a LeafSpy log}
+\title{Uses a 5-parameter thermal model to predict temperatures in a LeafSpy log}
 \usage{
 predict_temp(
   tmodel = NULL,
   effective_pack_resistance = NA,
   lambda_cell_to_pack = NA,
   lambda_pack_to_ambient = NA,
+  lambda_pack_AC_to_ambient = NA,
+  COP = NA,
   heat_capacity = NA,
   min_segment_length = 50,
   logfilnm = "log26Jan2026.csv",
@@ -24,6 +26,10 @@ predict_temp(
 
 \item{lambda_pack_to_ambient}{in hours, a primary parameter}
 
+\item{lambda_pack_AC_to_ambient}{in hours, a primary parameter}
+
+\item{COP}{dimensionless, a primary parameter}
+
 \item{heat_capacity}{in J/K, a secondary parameter}
 
 \item{min_segment_length}{shorter sequences of samples are ignored}
@@ -38,12 +44,14 @@ a thmodel
 \description{
 A LeafSpy logfile may be specified to this function by filename and
 directory, in which case this logfile is munged -- to mitigate the privacy
-risk of publishing a VIN, and to revise column names so that they're tidy. In
-normal use, the logfile is specified to predict_temp() by a thmodel object
--- which has metadata describing its provenance and the values of the
-modelling parameters, and which has a tibble-translation of the orginal
-LeafSpy csv with additional columns for the predictions of the model and for
-convenience when plotting.
+risk of publishing a VIN, and to revise column names so that they're tidy.
+This routine also does some "cleaning" of obviously-wonky data e.g. of a
+pack at 0 Volts or at 80 degrees (in a field that is normally in Centrigade
+units).  The output of this routine is a thmodel object containing the
+munged and cleaned data from LeafSpy augmented with additional columns for
+the predictions of pack temperature (and for convenience when plotting).
+The thmodel has metadata describing its provenance and the (updated)
+values of the modelling parameters used for its temperature predictions.
 }
 \details{
 Notes on heat capacity:
@@ -55,7 +63,13 @@ pack. Polyethylene is 2.0 J/gK, steel is 0.5 J/gK, everything else is less.
 As a round number, the heat content of the pack is thus 1.0e6 J/K.  This is a
 secondary parameter in our modelling because the Joule heating (in K) of a
 pack is the square of its amperage, multiplied by its effective resistance
-and divided by its heat capacity (in J/K).
+and divided by its heat capacity (in J/K).  The best-fit COP for the
+heatpump is within the normal range for a well-engineered heatpump,
+suggesting that the heat content of the pack is plausibly estimated
+by our 1e6 J/K default.  However our mOhms value is linearly dependent
+on the value assigned to the heat capacity of the pack, so it is a biased
+estimate until such time (if ever) we have some way to estimate the pack's
+effective heat capacity from empirical data.
 }
 \examples{
 m <- predict_temp() # uses data-raw/log26Jan26.csv

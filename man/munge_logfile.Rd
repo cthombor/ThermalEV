@@ -3,9 +3,8 @@
 \name{munge_logfile}
 \alias{munge_logfile}
 \title{Munges a csv to ensure it has no VIN column, has timestamps in ISO format,
-is sorted on these timestamps, and has tidied column names.  Side effect:
-updates this csv file.  Returns a thmodel with the munged csv as its logdata,
-and with provenance fields set.}
+is sorted on these timestamps, has tidied column names.  Warns of zeros
+in fields for GID, SOH, or pack volts.}
 \usage{
 munge_logfile(
   logfilnm = "log26Jan2026.csv",
@@ -27,6 +26,13 @@ munge_logfile(
 thmodel
 }
 \description{
+Side effect: updates this csv file!
+}
+\details{
+Returns a thmodel with the munged csv as its logdata; with NAs replacing
+nonsensical zeros in GID, SOH, and pack volts; and with provenance fields
+set.
+
 Todo: munge the filenm, if it contains information from a VIN.  Perhaps:
 allow the user to specify a pseudoVIN, to retain provenance informmation
 on csv files collected from multiple vehicles.

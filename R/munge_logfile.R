@@ -125,6 +125,12 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
     warning(paste0(logfilnm, ": ", zct, " zero",
                    ifelse(zct>1,"s",""),
                    " in the Pack Volts column."))
+  fct <- sum(tbl$'Ambient' > 50, na.rm = TRUE)
+  if (fct > 0)
+    warning(paste0(logfilnm, ": ", fct, " temperature",
+                   ifelse(fct>1,"s",""),
+                   " above 50 in the Ambient column, converted to C."))
+
 
   tbl <- tbl |>
     # Name cleaning: required for entry into the tidyverse.
@@ -145,8 +151,24 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
                suppressWarnings(as.double(x12v_bat_amps))),
       gids = ifelse(gids == 0, NA, gids),
       pack_volts = ifelse(pack_volts == 0, NA, pack_volts),
-      soh = ifelse(soh == 0, NA, soh)
+      soh = ifelse(soh == 0, NA, soh),
+      ambient = ifelse(ambient > 50, (ambient - 32) * 5 / 9, ambient)
     )
+
+  if (sum(tbl$ambient < -30, na.rm = TRUE) +
+              sum(tbl$ambient > 50, na.rm = TRUE) != 0)
+  {
+    # really wonky ambient temperature reading(s), neither C nor F!
+    # set to NA with a warning
+    wonkylt <- which(tbl$ambient < -30)
+    wonkyht <- which(tbl$ambient > 50)
+    tbl$ambient[wonkylt] <- NA
+    tbl$ambient[wonkyht] <- NA
+    wct <- sum(wonkylt) + sum(wonkyht)
+    warning(paste0(logfilnm, ": ", wct, " wonky temperature",
+                   ifelse(wct>1,"s",""),
+                   " set to NA in the Ambient column."))
+  }
 
   m <- new_thmodel()
   m$name <- ifelse(is.null(logname),

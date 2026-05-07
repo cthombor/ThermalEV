@@ -1,7 +1,7 @@
 Package: ThermalEV
 Type: Package
 Title: Analyse LeafSpy Logs to Estimate Thermal Parameters of a Nissan Battery
-Version: 0.2.1
+Version: 0.2.2
 Authors@R: c(
     person(
       "Thomborson", "Clark",
@@ -21,4 +21,4 @@ Encoding: UTF-8
 LazyData: true
 Depends: 
     R (>= 4.1.0)
-RoxygenNote: 7.3.3
+Config/roxygen2/version: 8.0.0

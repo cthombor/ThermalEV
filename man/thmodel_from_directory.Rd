@@ -8,7 +8,8 @@ thmodel_from_directory(
   logfildir = "data-raw/eNV200noac50kWh",
   name = NULL,
   USonian_dates = FALSE,
-  capacity = NULL
+  model = "e-NV200",
+  capacity = 24
 )
 }
 \arguments{
@@ -18,7 +19,9 @@ thmodel_from_directory(
 
 \item{USonian_dates}{TRUE for mdy, FALSE for dmy}
 
-\item{capacity}{nominal capacity of the pack, in kWh}
+\item{model}{either "e-NV200" (default) or "LEAF"}
+
+\item{capacity}{nominal capacity of the pack (default 24), in kWh ()}
 }
 \value{
 a thmodel

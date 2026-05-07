@@ -46,14 +46,14 @@ plot_fit <- function(m,
                                 na.rm=TRUE),
                            pack_volts)
     ) |>
-    mutate(charging_kW =
-             smooth(
-               ifelse(pack_amps > 0, 0, -pack_amps * pack_volts)) / 1000,
-           discharge_kW =
-             smooth(
-               ifelse(pack_amps > 0, pack_amps * pack_volts, 0)) / 1000,
-           `AC power/100` = est_pwr_a_c_50w * 0.5
-           ) |>
+    mutate(
+      charging_kW =
+        smooth(ifelse(pack_amps > 0, 0, -pack_amps * pack_volts)) / 1000,
+      discharge_kW =
+        smooth(ifelse(pack_amps > 0, pack_amps * pack_volts, 0)) / 1000,
+      `AC power/100` = est_pwr_a_c_50w * 0.5
+      # `AC power/100` = a_c_pwr_250w * 2.5 # less precise, same mean as 50W
+    ) |>
     select(date_time,
            pack_avg_temp,
            pred_pack_avg_temp,
@@ -72,12 +72,15 @@ plot_fit <- function(m,
       main = paste0(
         m$name,
         ": r = ",
-        format((m$parameters)[[1]], digits = 3),
+        format((m$parameters)[["effective_pack_resistance"]], digits = 3),
         " mΩ, λ1 = ",
-        format((m$parameters)[[2]], digits = 3),
+        format((m$parameters)[["lambda_cell_to_pack"]], digits = 3),
         " s, λ2 = ",
-        format((m$parameters)[[3]], digits = 3),
-        " h"
+        format((m$parameters)[["lambda_pack_to_ambient"]], digits = 3),
+        " h, λ3 = ",
+        format((m$parameters)[["lambda_pack_AC_to_ambient"]], digits = 3),
+        " h, COP = ",
+        format((m$parameters)[["COP"]], digits = 3)
       )
     )
 }

@@ -12,10 +12,11 @@ new_thmodel <- function() {
   m <-
     list(
       name = "", # user-friendly name, used for titles of plots
-      capacity = NULL,
+      model = "", # either "LEAF" or "e-NV200"
+      capacity = NULL, # nominal capacity, in kWh
       filnm = "", # provenance (a csv filnm)
       fildir = "", # provenance (dir relative to a homedir), no trailing "/"
-      modified.first.time = now(), # named as in xts
+      created.time = now(), # named untidily, as in xts
       modified.last.time = now(),
       parameters = list(),
       # if length(m$parameters) > 0, m$logdata must have the predicted temps.
@@ -42,12 +43,15 @@ new_thmodel <- function() {
 #' @examples default_params(new_thmodel())
 default_params <- function(m) {
   if (length(m$parameters) == 0) {
-    #default params from fitting eNV200noac50kWh.rda
-    #todo: update defaults after adding an AC_COP parameter
+    #default values from fitting eNV200noac50kWh.rda and eNV200ac50kWh.rda
     m$parameters <- list(effective_pack_resistance = 360,
                          lambda_cell_to_pack = 243,
                          lambda_pack_to_ambient = 7.68,
-                         heat_capacity = 1.0e6)
+                         lambda_pack_AC_to_ambient =
+                           ifelse(m$model == "e-NV200", 2.0, 7.68),
+                         COP = ifelse(m$model == "e-NV200", 3.0, 0),
+                         heat_capacity = 1.0e6
+                         )
   }
   m$modified.last.time <- now()
   return(m)
@@ -73,8 +77,5 @@ set_name_thmodel <- function(m, nm) {
 #todo: add a validator, at minimum confirming the presence of named elements of
 #the required class, possibly also doing some sanity-checking e.g. on the names
 #in logdata (if it has zero rows).
-
-#todo: write getters and setters, with the setters updating modified.last.time
-#if modifying the value of a field
 
 #todo: write a summary method

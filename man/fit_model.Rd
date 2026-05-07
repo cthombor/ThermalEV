@@ -9,6 +9,8 @@ fit_model(
   effective_pack_resistance = NA,
   lambda_cell_to_pack = NA,
   lambda_pack_to_ambient = NA,
+  lambda_pack_AC_to_ambient = NA,
+  COP = NA,
   print.level = 1
 )
 }
@@ -20,6 +22,10 @@ fit_model(
 \item{lambda_cell_to_pack}{in seconds}
 
 \item{lambda_pack_to_ambient}{in hours}
+
+\item{lambda_pack_AC_to_ambient}{in hours}
+
+\item{COP}{coefficient of heatpump performance, dimensionless}
 
 \item{print.level}{0 for quiet, 1 for start and endpoints, 2 for verbose}
 
@@ -39,5 +45,5 @@ fm: interface to predict_temp(), for use by nlm()
 
 Side effect: updates thmodel `m` in the calling environment
 
-fm(c(1,100,1000))
+fm(c(0.4,120,8,2,3))
 }

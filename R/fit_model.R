@@ -6,6 +6,8 @@
 #' @param effective_pack_resistance in mOhms
 #' @param lambda_cell_to_pack in seconds
 #' @param lambda_pack_to_ambient in hours
+#' @param lambda_pack_AC_to_ambient in hours
+#' @param COP coefficient of heatpump performance, dimensionless
 #'
 #' @returns a list, retval from nlm() describing its best-fit
 #' @export
@@ -16,6 +18,8 @@ fit_model <- function(m = NULL,
                       effective_pack_resistance = NA,
                       lambda_cell_to_pack = NA,
                       lambda_pack_to_ambient = NA,
+                      lambda_pack_AC_to_ambient = NA,
+                      COP = NA,
                       print.level = 1) {
 
 #' fm: interface to predict_temp(), for use by nlm()
@@ -28,19 +32,22 @@ fit_model <- function(m = NULL,
 #' @export
 #'
 #' @examples
-#' fm(c(1,100,1000))
-  fm <- function(x = c(packr, lambda1, lambda2)) {
+#' fm(c(0.4,120,8,2,3))
+  fm <- function(x = c(packr, lambda1, lambda2, lambda3, COP)) {
     m <- predict_temp(
       m,
       effective_pack_resistance = x[1],
       lambda_cell_to_pack = x[2],
-      lambda_pack_to_ambient = x[3]
+      lambda_pack_to_ambient = x[3],
+      lambda_pack_AC_to_ambient = x[4],
+      COP = x[5]
     )
     return(MSE_of_fit(m))
   }
 
   if (is.null(m)) m <- munge_logfile()  # use our default logfile
 
+  stopifnot(length(m$parameters == 0) || length(m$parameters == 5))
   if (length(m$parameters) == 0) {
     m <- default_params(m)
   }
@@ -56,14 +63,22 @@ fit_model <- function(m = NULL,
   if (!is.na(lambda_pack_to_ambient)) {
     m$parameters[["lambda_pack_to_ambient"]] <- lambda_pack_to_ambient
   }
+  if (!is.na(lambda_pack_AC_to_ambient)) {
+    m$parameters[["lambda_pack_AC_to_ambient"]] <- lambda_pack_AC_to_ambient
+  }
+  if (!is.na(COP)) {
+    m$parameters[["COP"]] <- COP
+  }
 
   # read a full set of primary factors into shorthand vars
   packr <- m$parameters[["effective_pack_resistance"]]
   lambda1 <- m$parameters[["lambda_cell_to_pack"]]
   lambda2 <- m$parameters[["lambda_pack_to_ambient"]]
+  lambda3 <- m$parameters[["lambda_pack_AC_to_ambient"]]
+  COP <- m$parameters[["COP"]]
 
   m$fit <- nlm(fm,
-               p = c(packr, lambda1, lambda2),
+               p = c(packr, lambda1, lambda2, lambda3, COP),
                print.level = print.level)
 
   # evaluate predict_temp() one last time, on the best fit
@@ -71,7 +86,9 @@ fit_model <- function(m = NULL,
     m,
     effective_pack_resistance = m$fit$estimate[1],
     lambda_cell_to_pack = m$fit$estimate[2],
-    lambda_pack_to_ambient = m$fit$estimate[3]
+    lambda_pack_to_ambient = m$fit$estimate[3],
+    lambda_pack_AC_to_ambient = m$fit$estimate[4],
+    COP = m$fit$estimate[5]
   )
 
   return(m)
