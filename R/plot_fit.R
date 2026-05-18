@@ -53,7 +53,26 @@ plot_fit <- function(m,
         smooth(ifelse(pack_amps > 0, pack_amps * pack_volts, 0)) / 1000,
       `AC power/100` = est_pwr_a_c_50w * 0.5
       # `AC power/100` = a_c_pwr_250w * 2.5 # less precise, same mean as 50W
-    ) |>
+    )
+
+  maxpe <- which.max(pd$err_pred)
+  minpe <- which.min(pd$err_pred)
+  cat("Underprediction by",
+      round(pd$err_pred[minpe], 2),
+      "degrees at",
+      format_ISO8601(pd$date_time[minpe]),
+      "\n")
+  cat("Overprediction by",
+      round(pd$err_pred[maxpe], 2),
+      "degrees at",
+      format_ISO8601(pd$date_time[maxpe]),
+      "\n")
+
+  mod <- lm(err_pred ~ slope_amps + var_amps, pd)
+# print(broom::tidy(mod))
+  print(broom::tidy(anova(mod)))
+
+  pd <- pd |>
     select(date_time,
            pack_avg_temp,
            pred_pack_avg_temp,

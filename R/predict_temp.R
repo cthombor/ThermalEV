@@ -93,6 +93,7 @@ predict_temp <- function(tmodel = NULL,
     m$parameters[["heat_capacity"]] <- heat_capacity
   }
 
+
   # read a full set of params
   effective_pack_resistance <- m$parameters[["effective_pack_resistance"]]
   lambda_cell_to_pack <- m$parameters[["lambda_cell_to_pack"]]
@@ -150,10 +151,36 @@ predict_temp <- function(tmodel = NULL,
 
   # predicted Joule heating of cells (in W)
   # n.b. the resistance is in mOhms
+  # n.b. slope of pack_amps has a nonlinear effect on heating
+  # n.b. the variance in pack_amps may be important because of jitter
+  # in the timing of its samples and the nonlinearity of its
+  # effect on Joule heating
+  multilag <- function(x, lags = 1:2) {
+    names(lags) <- as.character(lags)
+    purrr::map_dfr(lags, lag, x = x)
+  }
+  logtibble <- logtibble |>
+    mutate(
+      across(pack_amps, multilag, .unpack = TRUE),
+      .before = cp1
+    ) |>
+    rowwise() |>
+    mutate(
+      slope_amps = (pack_amps - pack_amps_1) / 2,
+      var_amps = var(c(pack_amps, pack_amps_1, pack_amps_2)),
+      .before = cp1
+    ) |>
+    ungroup()
+  logtibble <- logtibble |>
+    mutate(slope_amps = ifelse(is.na(slope_amps) | is.na(delta_t),
+                               0, slope_amps),
+           var_amps = ifelse(is.na(var_amps) | is.na(delta_t),
+                             0, var_amps)
+    )
   logtibble <- logtibble |>
     mutate(
       pred_Joule_heating =
-        pack_amps * pack_amps *
+        pack_amps * (pack_amps + 0.5 * slope_amps) *
         effective_pack_resistance /
         (soh / 100) /
         1000,
@@ -184,7 +211,8 @@ predict_temp <- function(tmodel = NULL,
   # inaccurate when there are missing samples; but can be efficiently computed
   # on any modern (deeply-pipelined) CPU.  Furthermore, it is undistorted by the
   # roundoff errors in the time-stamps (at 1-second precision!) on the samples
-  EMA_parameter_cell_to_pack <- sampling_interval / lambda_cell_to_pack
+  EMA_parameter_cell_to_pack <- min(1.0,
+                                    sampling_interval / lambda_cell_to_pack)
 
   # we now lurch from the tidyverse into the wilds of xts. The EMA is a simple
   # recursive filter; but R's runtime is hostile to recursion.  It's possible to
@@ -289,7 +317,8 @@ predict_temp <- function(tmodel = NULL,
     sampling_interval / (lambda_pack_to_ambient * 3600)
   EMA_parameter_pack_AC_to_ambient <-
     sampling_interval / (lambda_pack_AC_to_ambient * 3600)
-  EMA_parameter <- ifelse(logtibble$charge_mode == 0,
+  EMA_parameter <- ifelse((logtibble$charge_mode == 0) |
+                            (logtibble$est_pwr_a_c_50w == 0),
                           EMA_parameter_pack_to_ambient,
                           EMA_parameter_pack_AC_to_ambient)
   for (i in seq(nsegments)[which(!wexclude)]) {
@@ -319,10 +348,25 @@ predict_temp <- function(tmodel = NULL,
   # return to the tidyverse!  Hooray!!
   logtibble <- logtibble |>
     mutate(pred_pack_avg_temp = pred_temp_v,
+           err_pred = pred_pack_avg_temp - pack_avg_temp,
            .before = "cp1") |>
     select(!c(pred_Joule_heating, pred_heating_unlagged))
   m$logdata <- logtibble
   m$modified.last.time <- now()
+
+  maxpe <- which.max(logtibble$err_pred)
+  minpe <- which.min(logtibble$err_pred)
+  cat("Underprediction by",
+      round(logtibble$err_pred[minpe], 2),
+      "degrees at",
+      format_ISO8601(logtibble$date_time[minpe]),
+      "\n")
+  cat("Overprediction by",
+      round(logtibble$err_pred[maxpe], 2),
+      "degrees at",
+      format_ISO8601(logtibble$date_time[maxpe]),
+      "\n")
+
   return(m)
 
 }

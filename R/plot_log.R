@@ -46,15 +46,26 @@ plot_log <- function(m,
            'distance/100' = distance / 100,
            speed = smooth(speed),
            'elv/10' = smooth(elv) / 10,
-           SOC = soc / 10000
+           SOC = soc / 10000,
+           temp = pack_avg_temp,
+           t1 = pack_t1_c,
+           t2 = pack_t2_c,
+           t4 = pack_t4_c
     )
+
+  y <- x |> rowwise() |>
+    summarise(tdiff = max(t1, t2, t4) - min(t1, t2, t4))
+  x <- mutate(x, 'tdiff*10' = y$tdiff * 10)
+
   if (max(x$distance, na.rm = TRUE) < 150) {
     x <- x |>
       select(date_time,
              distance,
              speed,
              'elv/10',
-             SOC
+             SOC,
+             temp,
+             'tdiff*10'
       ) |>
       as.xts()
   } else if (max(x$distance, na.rm = TRUE) < 1500) {
@@ -63,7 +74,9 @@ plot_log <- function(m,
              'distance/10',
              speed,
              'elv/10',
-             SOC
+             SOC,
+             temp,
+             'tdiff*10'
       ) |>
       as.xts()
   } else {
@@ -72,7 +85,9 @@ plot_log <- function(m,
              'distance/100',
              speed,
              'elv/10',
-             SOC
+             SOC,
+             temp,
+             'tdiff*10'
       ) |>
       as.xts()
   }

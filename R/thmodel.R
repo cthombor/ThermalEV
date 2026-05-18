@@ -44,7 +44,8 @@ new_thmodel <- function() {
 default_params <- function(m) {
   if (length(m$parameters) == 0) {
     #default values from fitting eNV200noac50kWh.rda and eNV200ac50kWh.rda
-    m$parameters <- list(effective_pack_resistance = 360,
+    m$parameters <- list(effective_pack_resistance =
+                           ifelse(capacity == 24, 600, 360),
                          lambda_cell_to_pack = 243,
                          lambda_pack_to_ambient = 7.68,
                          lambda_pack_AC_to_ambient =
