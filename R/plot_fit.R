@@ -68,7 +68,7 @@ plot_fit <- function(m,
       format_ISO8601(pd$date_time[maxpe]),
       "\n")
 
-  mod <- lm(err_pred ~ slope_amps + var_amps, pd)
+  mod <- lm(err_pred ~ slope_amps + acc_amps, pd)
 # print(broom::tidy(mod))
   print(broom::tidy(anova(mod)))
 
@@ -98,7 +98,9 @@ plot_fit <- function(m,
         format((m$parameters)[["lambda_pack_to_ambient"]], digits = 3),
         " h, λ3 = ",
         format((m$parameters)[["lambda_pack_AC_to_ambient"]], digits = 3),
-        " h, COP = ",
+        " h, λ4 = ",
+        format((m$parameters)[["lambda_cooling_power"]], digits = 3),
+        " s, COP = ",
         format((m$parameters)[["COP"]], digits = 3)
       )
     )

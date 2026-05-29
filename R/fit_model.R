@@ -7,6 +7,7 @@
 #' @param lambda_cell_to_pack in seconds
 #' @param lambda_pack_to_ambient in hours
 #' @param lambda_pack_AC_to_ambient in hours
+#' @param lambda_cooling_power in seconds
 #' @param COP coefficient of heatpump performance, dimensionless
 #'
 #' @returns a list, retval from nlm() describing its best-fit
@@ -19,6 +20,7 @@ fit_model <- function(m = NULL,
                       lambda_cell_to_pack = NA,
                       lambda_pack_to_ambient = NA,
                       lambda_pack_AC_to_ambient = NA,
+                      lambda_cooling_power = NA,
                       COP = NA,
                       print.level = 1) {
 
@@ -33,21 +35,22 @@ fit_model <- function(m = NULL,
 #'
 #' @examples
 #' fm(c(0.4,120,8,2,3))
-  fm <- function(x = c(packr, lambda1, lambda2, lambda3, COP)) {
+  fm <- function(x = c(packr, lambda1, lambda2, lambda3, lambda4, COP)) {
     m <- predict_temp(
       m,
       effective_pack_resistance = x[1],
       lambda_cell_to_pack = x[2],
       lambda_pack_to_ambient = x[3],
       lambda_pack_AC_to_ambient = x[4],
-      COP = x[5]
+      lambda_cooling_power = x[5],
+      COP = x[6]
     )
     return(MSE_of_fit(m))
   }
 
   if (is.null(m)) m <- munge_logfile()  # use our default logfile
 
-  stopifnot(length(m$parameters == 0) || length(m$parameters == 5))
+  stopifnot(length(m$parameters == 0) || length(m$parameters == 7))
   if (length(m$parameters) == 0) {
     m <- default_params(m)
   }
@@ -66,6 +69,9 @@ fit_model <- function(m = NULL,
   if (!is.na(lambda_pack_AC_to_ambient)) {
     m$parameters[["lambda_pack_AC_to_ambient"]] <- lambda_pack_AC_to_ambient
   }
+  if (!is.na(lambda_cooling_power)) {
+    m$parameters[["lambda_cooling_power"]] <- lambda_cooling_power
+  }
   if (!is.na(COP)) {
     m$parameters[["COP"]] <- COP
   }
@@ -75,10 +81,11 @@ fit_model <- function(m = NULL,
   lambda1 <- m$parameters[["lambda_cell_to_pack"]]
   lambda2 <- m$parameters[["lambda_pack_to_ambient"]]
   lambda3 <- m$parameters[["lambda_pack_AC_to_ambient"]]
+  lambda4 <- m$parameters[["lambda_cooling_power"]]
   COP <- m$parameters[["COP"]]
 
   m$fit <- nlm(fm,
-               p = c(packr, lambda1, lambda2, lambda3, COP),
+               p = c(packr, lambda1, lambda2, lambda3, lambda4, COP),
                print.level = print.level)
 
   # evaluate predict_temp() one last time, on the best fit
@@ -88,7 +95,8 @@ fit_model <- function(m = NULL,
     lambda_cell_to_pack = m$fit$estimate[2],
     lambda_pack_to_ambient = m$fit$estimate[3],
     lambda_pack_AC_to_ambient = m$fit$estimate[4],
-    COP = m$fit$estimate[5]
+    lambda_cooling_power = m$fit$estimate[5],
+    COP = m$fit$estimate[6]
   )
 
   return(m)

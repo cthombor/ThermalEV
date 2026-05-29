@@ -43,13 +43,15 @@ new_thmodel <- function() {
 #' @examples default_params(new_thmodel())
 default_params <- function(m) {
   if (length(m$parameters) == 0) {
-    #default values from fitting eNV200noac50kWh.rda and eNV200ac50kWh.rda
     m$parameters <- list(effective_pack_resistance =
-                           ifelse(capacity == 24, 600, 360),
-                         lambda_cell_to_pack = 243,
-                         lambda_pack_to_ambient = 7.68,
+                           ifelse(m$capacity == 24, 550, 360),
+                         lambda_cell_to_pack =
+                           ifelse(m$capacity == 24, 0, 240),
+                         lambda_pack_to_ambient = 7.5,
                          lambda_pack_AC_to_ambient =
-                           ifelse(m$model == "e-NV200", 2.0, 7.68),
+                           ifelse(m$model == "e-NV200", 2.0, 7.5),
+                         lambda_cooling_power =
+                           ifelse(m$model == "e-NV200", 120, 0),
                          COP = ifelse(m$model == "e-NV200", 3.0, 0),
                          heat_capacity = 1.0e6
                          )
@@ -74,9 +76,3 @@ set_name_thmodel <- function(m, nm) {
   m$modified.last.time <- now()
   return(m)
 }
-
-#todo: add a validator, at minimum confirming the presence of named elements of
-#the required class, possibly also doing some sanity-checking e.g. on the names
-#in logdata (if it has zero rows).
-
-#todo: write a summary method
