@@ -31,7 +31,11 @@ plot_log <- function(m,
                    dplyr::last(which(
                      plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
-  stopifnot(!is.null(from_idx) && !is.null(to_idx) && from_idx < to_idx)
+  if (is.null(from_idx) || is.null(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx >= to_idx) {
+    warning("from_date is not before to_date")
+  }
 
   plotdata <- plotdata |> slice(from_idx:to_idx)
 
@@ -40,11 +44,16 @@ plot_log <- function(m,
   firstodo <- plotdata$odo_km[
     dplyr::first(which(!is.na(plotdata$odo_km)))]
 
+  #n.b. we plot data from speed sensor 1 rather than the GPS-reported speed
+  #there's a second speed sensor, presumably on the other wheel, and which may
+  #be calibrated differently or maybe has a different mean value because
+  #turns in one direction are significantly more common.  The outside wheel
+  #must turn faster than the inside wheel (if neither is skidding).
   x <- plotdata |>
     mutate(distance = odo_km - firstodo,
            'distance/10' = distance / 10,
            'distance/100' = distance / 100,
-           speed = smooth(speed),
+           speed1s = smooth(speed1),
            'elv/10' = smooth(elv) / 10,
            SOC = soc / 10000,
            temp = pack_avg_temp,
@@ -61,7 +70,7 @@ plot_log <- function(m,
     x <- x |>
       select(date_time,
              distance,
-             speed,
+             speed1s,
              'elv/10',
              SOC,
              temp,
@@ -72,7 +81,7 @@ plot_log <- function(m,
     x <- x |>
       select(date_time,
              'distance/10',
-             speed,
+             speed1s,
              'elv/10',
              SOC,
              temp,
@@ -83,7 +92,7 @@ plot_log <- function(m,
     x <- x |>
       select(date_time,
              'distance/100',
-             speed,
+             speed1s,
              'elv/10',
              SOC,
              temp,
@@ -106,7 +115,7 @@ plot_log <- function(m,
     x,
     legend.loc = "top",
     main.timespan = FALSE,
-    format.labels = "%y-%m-%d %H:%M",
+    format.labels = "%Y-%m-%d %H:%M",
     main = paste0(m$name, ": from (", startloc, ") to (", endloc, ")")
   )
 }
