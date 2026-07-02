@@ -12,10 +12,8 @@
 #' @export
 #'
 #' @examples
-#' plot_fit(predict_temp())
-#' plot_fit(predict_temp(), to_idx = 10)
-#' plot_fit(predict_temp(), to_date = "2026-01-26 11:00")
-#' plot_fit(fit_model())
+#' plot_fit(eNV200noac50kWh, from_idx = 1, to_idx = 10)
+#' plot_fit(eNV200ac50kWh, "2026-01-26 11:00", "2026-01-27")
 plot_fit <- function(m,
                      from_date = NULL,
                      to_date = NULL,
@@ -35,8 +33,10 @@ plot_fit <- function(m,
                    dplyr::last(which(
                      plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
-  if (is.null(from_idx) || is.null(to_idx) || from_idx > to_idx) {
-    warning("No data to plot!")
+  if (is.null(from_idx) || is.null(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx >= to_idx) {
+    warning("from_date is not before to_date")
   }
   pd <- plotdata |>
     slice(from_idx:to_idx) |>
@@ -68,9 +68,9 @@ plot_fit <- function(m,
       format_ISO8601(pd$date_time[maxpe]),
       "\n")
 
-  mod <- lm(err_pred ~ slope_amps + acc_amps, pd)
+# mod <- lm(err_pred ~ slope_amps + acc_amps, pd)
 # print(broom::tidy(mod))
-  print(broom::tidy(anova(mod)))
+# print(broom::tidy(anova(mod)))
 
   pd <- pd |>
     select(date_time,
@@ -87,7 +87,7 @@ plot_fit <- function(m,
       type = "p",
       pch = 1,
       main.timespan = FALSE,
-      format.labels = "%y-%m-%d %H:%M",
+      format.labels = "%Y-%m-%d %H:%M",
       main = paste0(
         m$name,
         ": r = ",
@@ -98,9 +98,9 @@ plot_fit <- function(m,
         format((m$parameters)[["lambda_pack_to_ambient"]], digits = 3),
         " h, λ3 = ",
         format((m$parameters)[["lambda_pack_AC_to_ambient"]], digits = 3),
-        " h, λ4 = ",
-        format((m$parameters)[["lambda_cooling_power"]], digits = 3),
-        " s, COP = ",
+        " h, fanp = ",
+        format((m$parameters)[["fan_power"]], digits = 3),
+        " W, COP = ",
         format((m$parameters)[["COP"]], digits = 3)
       )
     )

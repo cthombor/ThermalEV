@@ -1,46 +1,5 @@
 #' plot_soc_gid: plot a computed SOC and the reported SOC against gid
 #'
-#' SOC drops from 100% to 0%, linearly in gids,
-#' with 0% at min_gid.  At 100% SOC, the pack's usable capacity is
-#' max_sgid * SOH.  When new (at 100% SOH), the pack's (nominal!)
-#' usable capacity is max_sgid.
-#'
-#' We define a "scaled gid" as gid / SOH, and we use sgid to reference
-#' this derived unit.  Note that this definition allows us to perform
-#' a linear regression on the pack's reported gid and its reported SOC,
-#' parameterised on the nominal original capacity of the pack, and
-#' on the (presumably) invariant number of gids which are always
-#' held in reserve, i.e. are unusable to drive the vehicle, but important
-#' to mitigate the risk of "bricking" the pack if any cell's voltage
-#' drops below its minimum-allowable value.
-#'
-#' It is widely believed that the Nissan BMS is designed to report its
-#' best estimate of usable kWh in units (called the "gid" by the author
-#' of LeafSpy) of 80 Wh.
-#'
-#' Any BMS *may* revise its current estimate of usable kWh, if its
-#' estimate of the "resting voltage" of the pack, given its current
-#' estimate of the average temperature of its cells, is inconsistent with
-#' its current estimate for usable kWh.  There is normally a lookup
-#' table in a BMS for this purpose, with entries derived from a
-#' cell-manufacturer's spec sheet or from an empirical observation of
-#' typical cell-behaviour in a current batch of cells.  I doubt any
-#' automotive BMS will use a heuristic method to update its lookup
-#' table based on the data it has collected from its pack's behaviour --
-#' that could become quite unsafe!  Instead I think the method used
-#' in a Nissan BMS is to make incremental corrections to its current estimate
-#' for the gids remaining in the pack when there's a shift in its
-#' temperature (and possibly in its average cell-voltage differential);
-#' to adjust its estimated SOH (i.e. the pack's capacity) whenever
-#' the pack has been discharged almost fully -- and perhaps the SOH is
-#' adjusted at other times.
-#'
-#' The SOC as reported to me on my dashboard currently differ (by a few points)
-#' to the SOC recorded in a LeafSpy log.  This is disturbing, but puzzling out
-#' the relationship between these SOCs is I think best left until I have a good
-#' understanding of how the SOC recorded in a LeafSpy log varies with the other
-#' measurements and estimates recorded in this log.
-#'
 #' @param m a thmodel
 #' @param max_sgids if !is.null, gids at 100% SOC and 100% SOH, else estimated
 #' @param min_gids if !is.null, the (unscaled!) gids "in reserve" at 0% SOC
@@ -69,6 +28,48 @@ plot_soc_gid <- function(m,
                      min_soc_filter = NULL,
                      max_soc_filter = NULL)
 {
+  # SOC drops from 100% to 0%, linearly in gids,
+  # with 0% at min_gid.  At 100% SOC, the pack's usable capacity is
+  # max_sgid * SOH.  When new (at 100% SOH), the pack's (nominal!)
+  # usable capacity is max_sgid.
+  #
+  # We define a "scaled gid" as gid / SOH, and we use sgid to reference
+  # this derived unit.  Note that this definition allows us to perform
+  # a linear regression on the pack's reported gid and its reported SOC,
+  # parameterised on the nominal original capacity of the pack, and
+  # on the (presumably) invariant number of gids which are always
+  # held in reserve, i.e. are unusable to drive the vehicle, but important
+  # to mitigate the risk of "bricking" the pack if any cell's voltage
+  # drops below its minimum-allowable value.
+  #
+  # It is widely believed that the Nissan BMS is designed to report its
+  # best estimate of usable kWh in units (called the "gid" by the author
+  # of LeafSpy) of 80 Wh.
+  #
+  # Any BMS *may* revise its current estimate of usable kWh, if its
+  # estimate of the "resting voltage" of the pack, given its current
+  # estimate of the average temperature of its cells, is inconsistent with
+  # its current estimate for usable kWh.  There is normally a lookup
+  # table in a BMS for this purpose, with entries derived from a
+  # cell-manufacturer's spec sheet or from an empirical observation of
+  # typical cell-behaviour in a current batch of cells.  I doubt any
+  # automotive BMS will use a heuristic method to update its lookup
+  # table based on the data it has collected from its pack's behaviour --
+  # that could become quite unsafe!  Instead I think the method used
+  # in a Nissan BMS is to make incremental corrections to its current estimate
+  # for the gids remaining in the pack when there's a shift in its
+  # temperature (and possibly in its average cell-voltage differential);
+  # to adjust its estimated SOH (i.e. the pack's capacity) whenever
+  # the pack has been discharged almost fully -- and perhaps the SOH is
+  # adjusted at other times.
+  #
+  # The SOC as reported to me on my dashboard currently differ (by a few points)
+  # to the SOC recorded in a LeafSpy log.  This is disturbing, but puzzling out
+  # the relationship between these SOCs is I think best left until I have a good
+  # understanding of how the SOC recorded in a LeafSpy log varies with the other
+  # measurements and estimates recorded in this log.
+  #
+
   pd <- m$logdata |>
     select(date_time, gids, soc, soh, pack_volts, a_hr, pack_amps,
            pack_avg_temp) |>

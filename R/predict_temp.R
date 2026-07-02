@@ -33,7 +33,7 @@
 #' @param lambda_cell_to_pack in seconds, a primary parameter
 #' @param lambda_pack_to_ambient in hours, a primary parameter
 #' @param lambda_pack_AC_to_ambient in hours, a primary parameter
-#' @param lambda_cooling_power in seconds, a primary parameter
+#' @param fan_power in Watts, a primary parameter
 #' @param COP dimensionless, a primary parameter
 #' @param heat_capacity in J/K, a secondary parameter
 #' @param min_segment_length shorter sequences of samples are ignored
@@ -52,10 +52,10 @@ predict_temp <- function(tmodel = NULL,
                          lambda_cell_to_pack = NA,
                          lambda_pack_to_ambient = NA,
                          lambda_pack_AC_to_ambient = NA,
-                         lambda_cooling_power = NA,
+                         fan_power = NA,
                          COP = NA,
                          heat_capacity = NA,
-                         min_segment_length = 50,
+                         min_segment_length = 10,
                          logfilnm = "log26Jan2026.csv",
                          logfildir = "data-raw") {
 
@@ -88,8 +88,8 @@ predict_temp <- function(tmodel = NULL,
   if (!is.na(lambda_pack_AC_to_ambient)) {
     m$parameters[["lambda_pack_AC_to_ambient"]] <- lambda_pack_AC_to_ambient
   }
-  if (!is.na(lambda_cooling_power)) {
-    m$parameters[["lambda_cooling_power"]] <- lambda_cooling_power
+  if (!is.na(fan_power)) {
+    m$parameters[["fan_power"]] <- fan_power
   }
   if (!is.na(COP)) {
     m$parameters[["COP"]] <- COP
@@ -104,7 +104,7 @@ predict_temp <- function(tmodel = NULL,
   lambda_cell_to_pack <- m$parameters[["lambda_cell_to_pack"]]
   lambda_pack_to_ambient <- m$parameters[["lambda_pack_to_ambient"]]
   lambda_pack_AC_to_ambient <- m$parameters[["lambda_pack_AC_to_ambient"]]
-  lambda_cooling_power <- m$parameters[["lambda_cooling_power"]]
+  fan_power <- m$parameters[["fan_power"]]
   COP <- m$parameters[["COP"]]
   heat_capacity <- m$parameters[["heat_capacity"]]
 
@@ -112,11 +112,16 @@ predict_temp <- function(tmodel = NULL,
       ", λ1 = ", lambda_cell_to_pack,
       ", λ2 = ", lambda_pack_to_ambient,
       ", λ3 = ", lambda_pack_AC_to_ambient,
-      ", λ4 = ", lambda_cooling_power,
+      ", fanp = ", fan_power,
       ", COP = ", COP,
       "\n"))
 
   # n.b. additional secondary parameters may be stored in m$parameters
+
+  if (COP < 0) {
+    COP <- 0
+    warning("Negative COP is treated as 0\n")
+  }
 
   if (!"delta_t" %in% names(logtibble)) {
     # a minor optimisation: we avoid recomputing these columns
@@ -157,7 +162,6 @@ predict_temp <- function(tmodel = NULL,
       mutate(delta_K_delta_t =
                (pack_avg_temp - dplyr::lag(pack_avg_temp)) / delta_t,
              .before = cp1)
-
   }
 
   # we now predict temperatures, using the parameters
@@ -222,22 +226,22 @@ predict_temp <- function(tmodel = NULL,
       .before = cp1
     )
 
-  # unlagged pack-cooling wattage, assuming that any A/C power is devoted
-  # to pack cooling if charge_mode==1, or if the pack is above 40 degrees C.
-  # The latter condition is derived from a single observation of A/C running
-  # on a cold night while driving with a hot pack (ac24kWh_2024 on Feb 21),
-  # so the temperature threshold may be incorrect.
+  # unlagged pack-cooling wattage, assuming that if charge_mode==1, then
+  # any A/C power above fan_power is running the A/C compressor and its
+  # refrigerant is being circulated through the pack's evaporator
   logtibble <- logtibble |>
     mutate(
+      cooling_power = 50 * est_pwr_a_c_50w - fan_power,
+      cooling_power = if_else(cooling_power < 0, 0, cooling_power),
       # these are delta-temperatures of cooling, must be summed
       cooling_heatpump_unlagged =
-        if_else(charge_mode == 0 & pack_avg_temp < 40,
-                0,
-                COP * 50 * est_pwr_a_c_50w / heat_capacity * sampling_interval
+        if_else(
+          charge_mode == 0,
+          0,
+          COP * cooling_power / heat_capacity * sampling_interval
         ),
       .before = cp1
     )
-
 
   # we use an Exponential Moving Average filter on a per-sample basis: rather
   # inaccurate when there are missing samples; but can be efficiently computed
@@ -245,8 +249,6 @@ predict_temp <- function(tmodel = NULL,
   # roundoff errors in the time-stamps (at 1-second precision!) on the samples
   EMA_parameter_cell_to_pack <- min(1.0,
                                     sampling_interval / lambda_cell_to_pack)
-  EMA_parameter_cooling_power <- min(1.0,
-                                     sampling_interval / lambda_cooling_power)
 
   # we now lurch from the tidyverse into the wilds of xts. The EMA is a simple
   # recursive filter; but R's runtime is hostile to recursion.  It's possible to
@@ -267,17 +269,12 @@ predict_temp <- function(tmodel = NULL,
   wend <- lead(w) - 1
   wend[nsegments] <- length(logtibble$delta_t)
   wexclude <- (wend - wstart) < min_segment_length
+  # segment_starts <- logtibble$date_time[wstart]
 
   unlagged_heat <- as.xts(logtibble$pred_heating_unlagged, logtibble$date_time)
   lagged_heat <- as.xts(vector(mode = "double",
                                length = length(unlagged_heat)),
                         logtibble$date_time)
-  unlagged_cooling <- as.xts(logtibble$cooling_heatpump_unlagged,
-                             logtibble$date_time)
-  lagged_cooling <- as.xts(vector(mode = "double",
-                                  length = length(unlagged_heat)),
-                           logtibble$date_time)
-
   for (i in seq(nsegments)[which(!wexclude)]) {
     lagged_heat[wstart[i]:wend[i]] <-
       stats::filter(
@@ -286,100 +283,66 @@ predict_temp <- function(tmodel = NULL,
         method = "recursive",
         init = 0.
       )
-    lagged_cooling[wstart[i]:wend[i]] <-
-      stats::filter(
-        unlagged_cooling[wstart[i]:wend[i]] * EMA_parameter_cooling_power,
-        1. - EMA_parameter_cooling_power,
-        method = "recursive",
-        init = 0.
-      )
-  }
-
-  pack_avg_temp_xts <-
-    xts(logtibble$pack_avg_temp, logtibble$date_time)
-
-  # predict pack temps from cumsum of lagged delta-heat in each segment
-  segment_starts <- logtibble$date_time[wstart]
-  pred_pack_avg_temp_xts <- stats::lag(lagged_heat)
-
-  pred_pack_avg_temp_xts[wstart] <- pack_avg_temp_xts[wstart] # observations
-  for (i in seq(nsegments)[which(!wexclude)]) {
-    pred_pack_avg_temp_xts[wstart[i]:wend[i]] <-
-      cumsum(pred_pack_avg_temp_xts[wstart[i]:wend[i]]) # predictions
   }
 
   # we now revert to base R
+  pack_deltas_v <- as.vector(stats::lag(lagged_heat)[,1,drop=TRUE]) -
+    logtibble$cooling_heatpump_unlagged
 
-  # decrease pack temps if there's any active cooling, with a lag
-  # to model the delay before the refrigerant becomes cold at the
-  # heat-exchanger inside the pack
-  # n.b. due to the lag, there may be some cooling energy that isn't
-  # summed into the interval.  We evaluate this with a cumsum of the
-  # unlagged cooling over the interval.  There will also be some cooling
-  # energy reaching the pack from A/C operations prior to the start of
-  # an interval, but that could only be roughly estimated and we don't
-  # attempt this.
-
-  cumsum_cooling <- vector(mode = "double",
-                                  length = length(lagged_cooling))
-  cumsum_cooling_unlagged <- vector(mode = "double",
-                                  length = length(unlagged_cooling))
-
+  # predict pack temps from cumsum of lagged delta-heat in each segment
+  pred_pack_avg_temp_v <- logtibble$pack_avg_temp # observations at wstart
   for (i in seq(nsegments)[which(!wexclude)]) {
-    cumsum_cooling[wstart[i]:wend[i]] <-
-      cumsum(lagged_cooling[wstart[i]:wend[i]])
-    cumsum_cooling_unlagged[wstart[i]:wend[i]] <-
-      cumsum(unlagged_cooling[wstart[i]:wend[i]])
+    # predictions at !wstart
+    if (i == 671) browser()
+    obsi <- pred_pack_avg_temp_v[wstart[i]]
+    deltasi <- pack_deltas_v[(wstart[i] + 1) : wend[i]]
+    pred_pack_avg_temp_v[(wstart[i] + 1) : wend[i]] <-
+      rep(obsi, (wend[i] - wstart[i])) + cumsum(deltasi)
   }
-  # preserve the cumsums of cooling in logtibble, for ease in debugging
-  logtibble <- logtibble |>
-    mutate(
-      cooling = cumsum_cooling,
-      cooling_diff = cumsum_cooling_unlagged - cumsum_cooling,
-      .before = cp1
-    )
-  pred_temp_v <- as.vector(pred_pack_avg_temp_xts[,1,drop=TRUE])
 
-  pred_temp_v <- pred_temp_v - cumsum_cooling
-
-  # Cool the pack by its convection to the ambient air
+  # Cool (or warm!) the pack via convection to the ambient air
   #
   # TODO: determine if the pack_to_ambient time constant should decrease with
   # the vehicle's velocity
-
+  #
   # N.b. the computational kernel of this filter could be executed efficiently
-  # on any superscalar CPU, but is an inefficient scalar-mode computation
-  # when expressed in the vector-Fortran computational model of R.
+  # if compiled for a superscalar CPU, but must be expressed as an inefficient
+  # scalar-mode computation in R's variant of vector-Fortran.
 
-  # n.b. the second and third time constants are in hours
+  # n.b. these time constants are in hours
   EMA_parameter_pack_to_ambient <- min(1.0,
     sampling_interval / (lambda_pack_to_ambient * 3600))
   EMA_parameter_pack_AC_to_ambient <- min(1.0,
     sampling_interval / (lambda_pack_AC_to_ambient * 3600))
+  # n.b. when the fan is running inside the pack, the module-to-pack
+  # thermal conductivity is significantly increased -- so the time constant
+  # is significantly shorter on the module-to-ambient equilibrium
+  # n.b. these time constants are misleadingly named, as the thermosensors
+  # are on the modules rather than on the shell of the pack
   EMA_parameter_pack_cooling <- ifelse(
-    # on 2024-02-21, a hot pack was being actively cooled while driving!
-    # we assume this was due to pack temp > 40
-    ((logtibble$charge_mode == 0) & (pred_temp_v < 40) |
+    ((logtibble$charge_mode == 0) |
       (logtibble$est_pwr_a_c_50w == 0)),
                           EMA_parameter_pack_to_ambient,
                           EMA_parameter_pack_AC_to_ambient)
-  ambient_v <- logtibble$ambient
-  old_pred_v <- pred_temp_v
+
+  # the following is a manual TCO of the recursive filter
+  # $x_t = x_{t-1} + d_t + (a_t - x_{t-1} - d_t)\lambda$
+  # where $x_t$ is the pack temperature, $d_t$ is the heatflow from the cells,
+  # $a_t$ is the ambient temperature, and $\lambda$ is the time constant
+  # for heatflow from pack to ambient.
+
+  pred_temp_v <- pred_pack_avg_temp_v
+  pred_deltat_v <- pred_temp_v - lag(pred_temp_v, default = NULL)
+  # we hoist two vector-mode computations from the loop
+  ambient_heat_v <- logtibble$ambient * EMA_parameter_pack_cooling
+  EMA1 <- 1.0 - EMA_parameter_pack_cooling
+
   for (i in seq(nsegments)[which(!wexclude)]) {
-    # It might be interesting to benchmark R's Tailcall() against the following
-    # "manual" TCO of a simple recursive filter.  See
-    # stackoverflow.com/questions/78979492/optimization-of-tail-recursion-in-r
-    prev_newpred <- pred_temp_v[wstart[i]] # base case
-    prev_oldpred <- prev_newpred
+    prevpred <- pred_temp_v[wstart[i]]
     for (j in seq(wstart[i] + 1, wend[i])) {  # a scalar inner loop, ouch!
-      curr_oldpred <- old_pred_v[j]
-      # new delta-temp is the old delta-temp plus a small shift toward ambient
-      curr_newpred <- prev_newpred +
-        (curr_oldpred - prev_oldpred) +
-        (ambient_v[j] - prev_newpred) * EMA_parameter_pack_cooling[j]
-      pred_temp_v[j] <- curr_newpred
-      prev_oldpred <- curr_oldpred
-      prev_newpred <- curr_newpred
+      nextpred <- (prevpred + pred_deltat_v[j]) * EMA1[j] + ambient_heat_v[j]
+      pred_temp_v[j] <- nextpred
+      prevpred <- nextpred  # loop-carried dependency
     }
   }
 

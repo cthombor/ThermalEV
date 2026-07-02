@@ -31,8 +31,10 @@ plot_temps <- function(
                    dplyr::last(which(
                      plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
-  if (is.null(from_idx) || is.null(to_idx) || from_idx > to_idx) {
-    warning("No data to plot!")
+  if (is.null(from_idx) || is.null(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx > to_idx) {
+    warning("from_date is after to_date")
   }
 
   plotdata <- plotdata |> slice(from_idx:to_idx)
@@ -48,15 +50,21 @@ plot_temps <- function(
       type = "p",
       pch = 1,
       main.timespan = FALSE,
+      format.labels = "%Y-%m-%d %H:%M",
       main = paste0(
         m$name,
         ": r = ",
-        format((m$parameters)[[1]], digits = 3),
+        format((m$parameters)[["effective_pack_resistance"]], digits = 3),
         " mΩ, λ1 = ",
-        format((m$parameters)[[2]], digits = 3),
+        format((m$parameters)[["lambda_cell_to_pack"]], digits = 3),
         " s, λ2 = ",
-        format((m$parameters)[[3]], digits = 3),
-        " h"
+        format((m$parameters)[["lambda_pack_to_ambient"]], digits = 3),
+        " h, λ3 = ",
+        format((m$parameters)[["lambda_pack_AC_to_ambient"]], digits = 3),
+        " h, fanp = ",
+        format((m$parameters)[["fan_power"]], digits = 3),
+        " W, COP = ",
+        format((m$parameters)[["COP"]], digits = 3)
       )
     )
 }
