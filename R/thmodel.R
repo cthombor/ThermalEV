@@ -50,8 +50,8 @@ default_params <- function(m) {
                          lambda_pack_to_ambient = 7.5,
                          lambda_pack_AC_to_ambient =
                            ifelse(m$model == "e-NV200", 2.0, 7.5),
-                         lambda_cooling_power =
-                           ifelse(m$model == "e-NV200", 120, 0),
+                         fan_power =
+                           ifelse(m$model == "e-NV200", 250, 0),
                          COP = ifelse(m$model == "e-NV200", 3.0, 0),
                          heat_capacity = 1.0e6
                          )
