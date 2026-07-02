@@ -10,6 +10,7 @@ fit_model(
   lambda_cell_to_pack = NA,
   lambda_pack_to_ambient = NA,
   lambda_pack_AC_to_ambient = NA,
+  lambda_cooling_power = NA,
   COP = NA,
   print.level = 1
 )
@@ -24,6 +25,8 @@ fit_model(
 \item{lambda_pack_to_ambient}{in hours}
 
 \item{lambda_pack_AC_to_ambient}{in hours}
+
+\item{lambda_cooling_power}{in seconds}
 
 \item{COP}{coefficient of heatpump performance, dimensionless}
 
