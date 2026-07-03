@@ -46,6 +46,11 @@ plot_gids <- function(m,
                      pd$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
 
+  if (is.na(from_idx) || is.na(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx >= to_idx) {
+    warning("from_date is not before to_date")
+  }
   pd <- pd |> slice(from_idx:to_idx)
   if (!is.null(max_soc))
     pd <- pd[(pd$soc <= max_soc), ]

@@ -31,12 +31,11 @@ plot_soh <- function(m,
                    dplyr::last(which(
                      plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
                    )))
-  if (is.null(from_idx) || is.null(to_idx)) {
+  if (is.na(from_idx) || is.na(to_idx)) {
     warning("Date out of range")
   } else if (from_idx >= to_idx) {
     warning("from_date is not before to_date")
   }
-
   plotdata <- plotdata |> slice(from_idx:to_idx)
 
   #n.b. In the unmunged LeafSpy csv logs, odo_km == 0 when the vehicle is not

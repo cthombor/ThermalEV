@@ -39,6 +39,10 @@
 #' @param min_segment_length shorter sequences of samples are ignored
 #' @param logfilnm name of a csv logfile to be read, if is.null(tmodel)
 #' @param logfildir directory in which the logfile is located
+#' @param from_date starting date/time for calculation of MSE
+#' @param to_date ending date/time
+#' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
+#' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
 #'
 #' @returns a thmodel
 #' @export
@@ -57,7 +61,11 @@ predict_temp <- function(tmodel = NULL,
                          heat_capacity = NA,
                          min_segment_length = 10,
                          logfilnm = "log26Jan2026.csv",
-                         logfildir = "data-raw") {
+                         logfildir = "data-raw",
+                         from_date = NULL,
+                         to_date = NULL,
+                         from_idx = NULL,
+                         to_idx = NULL) {
 
   if (!nzchar(logfilnm) && is.null(tmodel)) {
     stop("Aborting. Please specify the name of a LeafSpy logfile.")
@@ -98,7 +106,6 @@ predict_temp <- function(tmodel = NULL,
     m$parameters[["heat_capacity"]] <- heat_capacity
   }
 
-
   # read a full set of params
   effective_pack_resistance <- m$parameters[["effective_pack_resistance"]]
   lambda_cell_to_pack <- m$parameters[["lambda_cell_to_pack"]]
@@ -115,12 +122,11 @@ predict_temp <- function(tmodel = NULL,
       ", fanp = ", fan_power,
       ", COP = ", COP,
       "\n"))
-
   # n.b. additional secondary parameters may be stored in m$parameters
 
-  if (COP < 0) {
-    COP <- 0
-    warning("Negative COP is treated as 0\n")
+  if (COP < 0.5) {
+    COP <- 0.5
+    warning("The minimum COP of a fit is 0.5\n")
   }
 
   if (!"delta_t" %in% names(logtibble)) {
@@ -361,14 +367,45 @@ predict_temp <- function(tmodel = NULL,
   m$logdata <- logtibble
   m$modified.last.time <- now()
 
+  # curiously, xts insists on UTC for stored dates & times
+  from_idx <- ifelse(is.null(from_date),
+                     ifelse(is.null(from_idx), 1, from_idx),
+                     dplyr::first(which(
+                       logtibble$date_time >= as.POSIXct(from_date, tz = "UTC")
+                     )))
+  to_idx <- ifelse(is.null(to_date),
+                   ifelse(is.null(to_idx), nrow(m$logdata), to_idx),
+                   dplyr::last(which(
+                     logtibble$date_time <= as.POSIXct(to_date, tz = "UTC")
+                   )))
+  if (is.na(from_idx) || is.na(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx >= to_idx) {
+    warning("from_date is not before to_date")
+  }
+
   maxpe <- which.max(logtibble$err_pred)
+  maxpew <- which.max(logtibble$err_pred[from_idx:to_idx])
   minpe <- which.min(logtibble$err_pred)
-  cat("Underprediction by",
+  minpew <- which.min(logtibble$err_pred[from_idx:to_idx])
+  if ((from_idx - to_idx + 1) < length(logtibble$err_pred)) {
+    cat("Underprediction in window by",
+        round(logtibble$err_pred[minpew], 2),
+        "degrees at",
+        format_ISO8601(logtibble$date_time[minpew]),
+        "\n")
+    cat("Overprediction in window by",
+        round(logtibble$err_pred[maxpew], 2),
+        "degrees at",
+        format_ISO8601(logtibble$date_time[maxpew]),
+        "\n")
+  }
+  cat("Underprediction in the full dataset by",
       round(logtibble$err_pred[minpe], 2),
       "degrees at",
       format_ISO8601(logtibble$date_time[minpe]),
       "\n")
-  cat("Overprediction by",
+  cat("Overprediction in the full dataset by",
       round(logtibble$err_pred[maxpe], 2),
       "degrees at",
       format_ISO8601(logtibble$date_time[maxpe]),

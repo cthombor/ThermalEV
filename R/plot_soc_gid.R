@@ -102,6 +102,11 @@ plot_soc_gid <- function(m,
                    dplyr::last(which(
                      pd$date_time <= as.POSIXct(to_date)
                    )))
+  if (is.na(from_idx) || is.na(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx >= to_idx) {
+    warning("from_date is not before to_date")
+  }
   pd <- pd |> slice(from_idx:to_idx)
 
   if (!is.null(max_soc_filter))

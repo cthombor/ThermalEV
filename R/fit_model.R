@@ -9,6 +9,10 @@
 #' @param lambda_pack_AC_to_ambient in hours
 #' @param fan_power in W
 #' @param COP coefficient of heatpump performance, dimensionless
+#' @param from_date starting date/time
+#' @param to_date ending date/time
+#' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
+#' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
 #'
 #' @returns a list, retval from nlm() describing its best-fit
 #' @export
@@ -22,7 +26,11 @@ fit_model <- function(m = NULL,
                       lambda_pack_AC_to_ambient = NA,
                       fan_power = NA,
                       COP = NA,
-                      print.level = 1) {
+                      print.level = 1,
+                      from_date = NULL,
+                      to_date = NULL,
+                      from_idx = NULL,
+                      to_idx = NULL) {
 
 #' fm: interface to predict_temp(), for use by nlm()
 #'
@@ -84,11 +92,33 @@ fit_model <- function(m = NULL,
   fanp <- m$parameters[["fan_power"]]
   COP <- m$parameters[["COP"]]
 
+  # all logs "should" be sorted on date-time... but just in case...
+  plotdata <- m$logdata |> arrange(date_time)
+  # curiously, xts insists on UTC for stored dates & times
+  from_idx <- ifelse(is.null(from_date),
+                     ifelse(is.null(from_idx), 1, from_idx),
+                     dplyr::first(which(
+                       plotdata$date_time >= as.POSIXct(from_date, tz = "UTC")
+                     )))
+  to_idx <- ifelse(is.null(to_date),
+                   ifelse(is.null(to_idx), nrow(m$logdata), to_idx),
+                   dplyr::last(which(
+                     plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
+                   )))
+  if (is.na(from_idx) || is.na(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx >= to_idx) {
+    warning("from_date is not before to_date")
+  }
+
+  origmodel <- m
+  m$logdata <- m$logdata |> slice(from_idx:to_idx)
+
   m$fit <- nlm(fm,
                p = c(packr, lambda1, lambda2, lambda3, fanp, COP),
                print.level = print.level)
 
-  # evaluate predict_temp() one last time, on the best fit
+  # evaluate predict_temp() on the best fit
   m <- predict_temp(
     m,
     effective_pack_resistance = m$fit$estimate[1],
@@ -98,8 +128,20 @@ fit_model <- function(m = NULL,
     fan_power = m$fit$estimate[5],
     COP = m$fit$estimate[6]
   )
+  cat("MSE of fit over the specified range:", MSE_of_fit(m), "\n")
 
-  return(m)
+  origmodel <- predict_temp(
+    origmodel,
+    effective_pack_resistance = m$fit$estimate[1],
+    lambda_cell_to_pack = m$fit$estimate[2],
+    lambda_pack_to_ambient = m$fit$estimate[3],
+    lambda_pack_AC_to_ambient = m$fit$estimate[4],
+    fan_power = m$fit$estimate[5],
+    COP = m$fit$estimate[6]
+  )
+  cat("MSE of fit over the full dataset:", MSE_of_fit(origmodel), "\n")
+
+  return(origmodel)
 }
 
 #' MSE_of_fit: compute the mean squared error of the estimation in a logtibble

@@ -87,7 +87,11 @@ plot_kWh <- function(m,
                    dplyr::last(which(
                      pd$date_time <= as.POSIXct(to_date, tz = "NZ")
                    )))
-
+  if (is.na(from_idx) || is.na(to_idx)) {
+    warning("Date out of range")
+  } else if (from_idx >= to_idx) {
+    warning("from_date is not before to_date")
+  }
   pd <- pd |>
     slice(from_idx:to_idx) |>
     # repair typecasting errors, an ineffective hack
