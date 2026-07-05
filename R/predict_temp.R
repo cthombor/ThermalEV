@@ -388,7 +388,7 @@ predict_temp <- function(tmodel = NULL,
   maxpew <- which.max(logtibble$err_pred[from_idx:to_idx])
   minpe <- which.min(logtibble$err_pred)
   minpew <- which.min(logtibble$err_pred[from_idx:to_idx])
-  if ((from_idx - to_idx + 1) < length(logtibble$err_pred)) {
+  if ((to_idx - from_idx + 1) < length(logtibble$err_pred)) {
     cat("Underprediction in window by",
         round(logtibble$err_pred[minpew], 2),
         "degrees at",
