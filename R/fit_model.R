@@ -8,7 +8,7 @@
 #' @param lambda_pack_AC_to_ambient in hours
 #' @param fan_power in W
 #' @param COP coefficient of heatpump performance, dimensionless
-#' @param fixed_parameters length-6 Boolean vector
+#' @param fixed_parameters length-7 Boolean vector
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
@@ -26,7 +26,7 @@ fit_model <- function(m = NULL,
                       lambda_pack_AC_to_ambient = NA,
                       fan_power = NA,
                       COP = NA,
-                      fixed_parameters = c(F, F, F, F, T, T),
+                      fixed_parameters = c(F, F, F, F, T, T, T),
                       from_date = NULL,
                       to_date = NULL,
                       from_idx = NULL,

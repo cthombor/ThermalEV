@@ -53,6 +53,7 @@ default_params <- function(m) {
                          fan_power =
                            ifelse(m$model == "e-NV200", 250, 0),
                          COP = ifelse(m$model == "e-NV200", 3.0, 0),
+                         arrhenius_resistance = -4000,
                          heat_capacity = 1.0e6
                          )
   }

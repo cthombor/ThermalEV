@@ -101,7 +101,9 @@ plot_fit <- function(m,
         " h, fanp = ",
         format((m$parameters)[["fan_power"]], digits = 3),
         " W, COP = ",
-        format((m$parameters)[["COP"]], digits = 3)
+        format((m$parameters)[["COP"]], digits = 3),
+        ", a = ",
+        format((m$parameters)[["arrhenius_resistance"]], digits = 3)
       )
     )
 }
