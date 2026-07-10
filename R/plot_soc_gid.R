@@ -16,7 +16,7 @@
 #'
 #' @examples
 #' plot_soc_gid(eNV200ac24kWh_2025)
-#' plot_soc_gid(eNV200ac24kWh_2025, max_soc = 25)
+#' plot_soc_gid(eNV200ac24kWh_2025, max_soc_filter = 25)
 plot_soc_gid <- function(m,
                      max_gids = NULL,
                      min_gids = NULL,
@@ -28,7 +28,7 @@ plot_soc_gid <- function(m,
                      min_soc_filter = NULL,
                      max_soc_filter = NULL)
 {
-  # SOC drops from 100% to 0%, linearly in gids,
+  # The LeafSpy-reported SOC drops from 100% to 0%, linearly in gids,
   # with 0% at min_gid.  At 100% SOC, the pack's usable capacity is
   # max_sgid * SOH.  When new (at 100% SOH), the pack's (nominal!)
   # usable capacity is max_sgid.
@@ -63,12 +63,14 @@ plot_soc_gid <- function(m,
   # the pack has been discharged almost fully -- and perhaps the SOH is
   # adjusted at other times.
   #
-  # The SOC as reported to me on my dashboard currently differ (by a few points)
-  # to the SOC recorded in a LeafSpy log.  This is disturbing, but puzzling out
-  # the relationship between these SOCs is I think best left until I have a good
-  # understanding of how the SOC recorded in a LeafSpy log varies with the other
-  # measurements and estimates recorded in this log.
-  #
+  # n.b. the SOC as reported to me on my dashboard is rather different to the
+  # SOC recorded by LeafSpy.  To estimate the "real" SOC, one might scale the
+  # dashboard readout by 0.8 and add 15.  Thus: 100% SOC on the dash is thus
+  # approx 95% of the pack's capacity, and there's still about 15% of the
+  # capacity available with a "flat" battery.  The substantial bottom margin
+  # is presumably to mitigate the risk of catastrophic damage due to
+  # undervoltage due to self-discharge after a turtling incident.  See
+  # https://cthombor.wpcomstaging.com/50kwh-upgrade-to-my-e-nv200/50kwh-upgrade-to-my-24kwh-2014-nissan-e-nv200-part-3-estimation-of-usable-kwh/
 
   pd <- m$logdata |>
     select(date_time, gids, soc, soh, pack_volts, a_hr, pack_amps,

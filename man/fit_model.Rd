@@ -10,9 +10,17 @@ fit_model(
   lambda_cell_to_pack = NA,
   lambda_pack_to_ambient = NA,
   lambda_pack_AC_to_ambient = NA,
-  lambda_cooling_power = NA,
+  fan_power = NA,
   COP = NA,
-  print.level = 1
+  arrhenius_resistance = NA,
+  heat_capacity = NA,
+  iter_count = 4,
+  min_segment_length = 10,
+  fixed_parameters = c(F, F, F, F, T, T, T),
+  from_date = NULL,
+  to_date = NULL,
+  from_idx = NULL,
+  to_idx = NULL
 )
 }
 \arguments{
@@ -26,11 +34,27 @@ fit_model(
 
 \item{lambda_pack_AC_to_ambient}{in hours}
 
-\item{lambda_cooling_power}{in seconds}
+\item{fan_power}{in W}
 
 \item{COP}{coefficient of heatpump performance, dimensionless}
 
-\item{print.level}{0 for quiet, 1 for start and endpoints, 2 for verbose}
+\item{arrhenius_resistance}{in K, a primary parameter}
+
+\item{heat_capacity}{in J/K, a secondary parameter}
+
+\item{iter_count}{controls convergence on predicted temps}
+
+\item{min_segment_length}{shorter sequences of samples are ignored}
+
+\item{fixed_parameters}{length-7 Boolean vector, reduces dimension of opt}
+
+\item{from_date}{starting date/time}
+
+\item{to_date}{ending date/time}
+
+\item{from_idx}{starting index in thmodel, ignored if !is.null(from_date)}
+
+\item{to_idx}{ending index in thmodel, ignored if !is.null(to_date)}
 
 \item{x}{parameter list}
 }
@@ -48,5 +72,5 @@ fm: interface to predict_temp(), for use by nlm()
 
 Side effect: updates thmodel `m` in the calling environment
 
-fm(c(0.4,120,8,2,3))
+fm(c(500, 120, 8, 2, 300, 3))
 }

@@ -1,4 +1,4 @@
-#' Uses a 5-parameter thermal model to predict temperatures in a LeafSpy log
+#' Uses a 7-parameter thermal model to predict temperatures in a LeafSpy log
 #'
 #' A LeafSpy logfile may be specified to this function by filename and
 #' directory, in which case this logfile is munged -- to mitigate the privacy
@@ -39,6 +39,7 @@
 #' @param heat_capacity in J/K, a secondary parameter
 #' @param iter_count controls convergence on predicted temps
 #' @param min_segment_length shorter sequences of samples are ignored
+#' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #' @param logfilnm name of a csv logfile to be read, if is.null(tmodel)
 #' @param logfildir directory in which the logfile is located
 #' @param from_date starting date/time for calculation of MSE
@@ -63,7 +64,8 @@ predict_temp <- function(tmodel = NULL,
                          arrhenius_resistance = NA,
                          heat_capacity = NA,
                          iter_count = 4,
-                         min_segment_length = 10,
+                         min_segment_length = 20,
+                         trace = 1,
                          logfilnm = "log26Jan2026.csv",
                          logfildir = "data-raw",
                          from_date = NULL,
@@ -123,7 +125,8 @@ predict_temp <- function(tmodel = NULL,
   arrhenius_resistance <- m$parameters[["arrhenius_resistance"]]
   heat_capacity <- m$parameters[["heat_capacity"]]
 
-  cat(paste0("predict_temp: r = ", effective_pack_resistance,
+  if (trace > 0) {
+    cat(paste0("predict_temp: r = ", effective_pack_resistance,
              ", λ1 = ", lambda_cell_to_pack,
              ", λ2 = ", lambda_pack_to_ambient,
              ", λ3 = ", lambda_pack_AC_to_ambient,
@@ -131,11 +134,15 @@ predict_temp <- function(tmodel = NULL,
              ", COP = ", COP,
              ", a = ", arrhenius_resistance,
              "\n"))
+  }
   # n.b. additional secondary parameters may be stored in m$parameters
 
-  if (COP < 0.5) {
-    COP <- 0.5
-    warning("The minimum COP of a fit is 0.5\n")
+  if (COP < 0.01) {
+    COP <- 0.01
+    warning("The minimum COP of a fit is 0.01\n")
+    # avoids runaway negative COP in optim() on low fan_power, when it's the
+    # effective pack resistance which is causing the heat gain during a
+    # fastcharge
   }
 
   if (!"delta_t" %in% names(logtibble)) {
@@ -144,12 +151,20 @@ predict_temp <- function(tmodel = NULL,
     #compute delta_t for runs of near-consecutive samples
     logtibble <- logtibble |>
       mutate(delta_t = date_time - dplyr::lag(date_time))
+    # n.b. dplyr's lag/lead is sort-of-intuitive if you imagine lag() as an
+    # element-wise operation which retrieves the "previous" value in a vector,
+    # rather than imagining that a lagged timeseries has been shifted
+    # "backwards" (toward lower-indexed/earlier values).  It's a hazardous
+    # semantic conflict with xts::lag() and stats::lag()!
 
-    sampling_interval <- as.double(median(logtibble$delta_t, na.rm = TRUE))
+    # we make a rude estimate of the sampling interval over the whole file
+    # in order to count missing samples (with reasonable accuracy)
+    # TODO: review this code for adequacy on files with a non-constant
+    # sampling interval (which may be changed at any time by the LeafSpy user)
+    sampling_interval_est <- as.double(median(logtibble$delta_t, na.rm = TRUE))
     # multiple missing samples will terminate a predictive segment
-    # n.b. isolated missing samples do not hugely affect our model's predictions
-    # time-stamps in the logs have a precision of 1 second
-    max_delta_t <- 2 * sampling_interval + 2
+    # n.b. time-stamps in the logs have a precision of 1 second
+    max_delta_t <- 2 * sampling_interval_est + 2
     logtibble <- logtibble |>
       mutate(delta_t = ifelse(delta_t > max_delta_t, NA, delta_t))
 
@@ -159,17 +174,24 @@ predict_temp <- function(tmodel = NULL,
         pack_t1_c, pack_t2_c, pack_t4_c
       ))), .before = cp1)
 
-    # n.b. ambient temps are unreliable at the start of a segment: they're
-    # sometimes reported in degrees F rather than degrees C.
+    # n.b. pack temps are unreliable when LeafSpy is still initialising,
+    # as it sometimes stutters on the previous temp readouts.  We rely heavily
+    # on the first temp readings in a predictive segment as the basis of
+    # our temperature predictions, so must delay starting the prediction
+    # until these readouts are stable.
+    # see e.g. eNV200ac24kWh_2025 2025-08-31 09:15:06
     logtibble <- logtibble |>
-      mutate(ambient = ifelse(is.na(delta_t), NA, ambient))
-
-    # n.b. pack temps seem to be reliably reported in degrees C, but we'll
-    # monitor this...
-    outlier_temps <- which(logtibble$pack_t4_c > 50)
-    if (length(outlier_temps) > 0) {
-      warning(paste(length(outlier_temps) > 0),
-              "temperatures greater than 50 in the pack_t4_c column")
+      mutate(
+        wonky_temps = !is.na(dplyr::lead(delta_t)) &
+          (abs((pack_avg_temp - dplyr::lead(pack_avg_temp))) > 1),
+        delta_t = ifelse(wonky_temps, NA, delta_t)
+        )
+    wwonky <- which(logtibble$wonky_temps)
+    if (length(wwonky) > 0) {
+      warning(paste("Omitted implausible temperature reading(s) at",
+                      paste(format_ISO8601(logtibble$date_time[wwonky]),
+                            collapse = " "),
+                      collapse = " "))
     }
 
     # rate of heat gain (in K/s)
@@ -221,7 +243,7 @@ predict_temp <- function(tmodel = NULL,
   w <- which(is.na(logtibble$delta_t))
   nsegments <- length(w)
   wstart <- w
-  wend <- lead(w) - 1
+  wend <- dplyr::lead(w) - 1
   wend[nsegments] <- length(logtibble$delta_t)
   wexclude <- (wend - wstart) < min_segment_length
 
@@ -230,35 +252,26 @@ predict_temp <- function(tmodel = NULL,
     segnumv[wstart[i]:wend[i]] = i
   }
 
+  # the sampling interval is a parameter in LeafSpy which
+  # we estimate on a per-segment basis.
   #n.b. we don't predict in segnum == 0
   logtibble <- logtibble |>
     mutate(segnum = segnumv, .before = pack_avg_temp) |>
     group_by(segnum) |>
-    mutate(pred_pack_avg_temp =
+    mutate(sampling_interval = mean(delta_t, na.rm = T),
+           pred_pack_avg_temp =
              if_else(segnum == 0, NA, first(pack_avg_temp)),
            pred_hx =
              if_else(segnum == 0, NA, first(hx)),
+           EMA_parameter_cell_to_pack =
+             min(1.0, sampling_interval / lambda_cell_to_pack),
+           # n.b. the next two time constants are in hours
+           EMA_parameter_pack_to_ambient =
+             min(1.0, sampling_interval / (lambda_pack_to_ambient * 3600)),
+           EMA_parameter_pack_AC_to_ambient =
+             min(1.0, sampling_interval / (lambda_pack_AC_to_ambient * 3600)),
            .before = pack_avg_temp) |>
     ungroup()
-
-  # we recompute the sampling_interval with more precision, by using the
-  # mean rather than the median as we had done when defining segments in the
-  # logfile pre-processing step. This calculation is insensitive to the long
-  # intervals between segments, and is likely is at a higher precision than the
-  # 1-second resolution of timestamps as recorded in the logfile)
-  #
-  sampling_interval <- as.double(mean(logtibble$delta_t, na.rm = TRUE))
-
-  # Sanity-test the sampling_interval, just in case someone had modified this
-  # aspect of the LeafSpy setup within the span of a thmodel. One possibility is
-  # to confirm that sampling_interval is within the 49th to 51st percentile of
-  # the delta_t.  Here we merely confirm it is within 1 second of the median of
-  # the delta_t.  There may be some skew from missing samples due to an
-  # overloaded phone.
-  if( abs(sampling_interval -
-      as.double(median(logtibble$delta_t, na.rm = TRUE))) >= 1) {
-    warning("Sampling interval may have been changed on LeafSpy\n")
-  }
 
   for (iternum in 1:iter_count) {
 
@@ -310,47 +323,46 @@ predict_temp <- function(tmodel = NULL,
           if_else(
             charge_mode == 0,
             0,
-            COP * cooling_power / heat_capacity * sampling_interval
+            COP * cooling_power / heat_capacity * delta_t
           ),
         .before = cp1
       )
 
-    # we use an Exponential Moving Average filter on a per-sample basis: rather
-    # inaccurate when there are missing samples; but can be efficiently computed
-    # on any modern (deeply-pipelined) CPU.  Furthermore, it is undistorted by the
-    # roundoff errors in the time-stamps (at 1-second precision!) on the samples
-    EMA_parameter_cell_to_pack <- min(1.0,
-                                      sampling_interval / lambda_cell_to_pack)
-
-    # we now lurch from the tidyverse into the wilds of xts. The EMA is a simple
-    # recursive filter; but R's runtime is hostile to recursion.  It's possible to
-    # use sapply() to implement a reasonably-efficient tail-recursion, but its
-    # correctness relies on an undocumented expectation of sapply: that it
-    # performs a sequential, in-order execution of its FUN, and not a vectorised
-    # implementation (which would read all of its inputs fully, rather than
-    # stalling the computation of the second element of its output until the
-    # computation of its first element has completed) See stackoverflow.com/
+    # we use an Exponential Moving Average filter on a per-sample basis:
+    # inaccurate if there are many missing samples -- but easily coded as a
+    # recursion, and quite efficient if compiled in C for any modern
+    # (deeply-pipelined) CPU.  Furthermore, it is undistorted by the roundoff
+    # errors in the time-stamps (at 1-second precision!) on the samples.
+    # Annoyingly, the tidyverse has no support for recursive filtering, and the
+    # vector-FORTRAN execution model of R is hostile to recursive function
+    # calls. Any EMA could be implemented as a tail-recursion in sapply() -- but
+    # only if we assume that it will if we assume it will always perform a
+    # sequential, in-order execution of its FUN.  An R that's optimised for a
+    # vector supercomputer would read all of its inputs fully -- and fail to
+    # handle the loop-carried dependency of an iterative implementation of a
+    # tail recursion. See stackoverflow.com/
     # questions/49348870/tibbletime-previous-days-close/49373709#
     # comment140995212_49373709 and github.com/tidyverse/dbplyr/issues/1108
 
     # predicted delta-heating of pack (in K), with exponential lag, grouped
     # by the gaps in the sampling
-
     unlagged_heat <- as.xts(logtibble$pred_heating_unlagged, logtibble$date_time)
     lagged_heat <- as.xts(vector(mode = "double",
                                  length = length(unlagged_heat)),
                           logtibble$date_time)
     for (i in seq(nsegments)[which(!wexclude)]) {
+      EMA_param_1 <- logtibble$EMA_parameter_cell_to_pack[wstart[1]]
       lagged_heat[wstart[i]:wend[i]] <-
         stats::filter(
-          unlagged_heat[wstart[i]:wend[i]] * EMA_parameter_cell_to_pack,
-          1. - EMA_parameter_cell_to_pack,
+          unlagged_heat[wstart[i]:wend[i]] * EMA_param_1,
+          1. - EMA_param_1,
           method = "recursive",
           init = 0.
         )
     }
 
-    # we now revert to base R
+    # we now revert to base R, to implement EMAs beyond the scope of
+    # stats:filter()
     pack_deltas_v <- as.vector(lagged_heat[,1,drop=TRUE]) -
       logtibble$cooling_heatpump_unlagged
 
@@ -374,44 +386,41 @@ predict_temp <- function(tmodel = NULL,
     # if compiled for a superscalar CPU, but must be expressed as an inefficient
     # scalar-mode computation in R's variant of vector-Fortran.
 
-    # n.b. these time constants are in hours
-    EMA_parameter_pack_to_ambient <- min(1.0,
-                                         sampling_interval / (lambda_pack_to_ambient * 3600))
-    EMA_parameter_pack_AC_to_ambient <- min(1.0,
-                                            sampling_interval / (lambda_pack_AC_to_ambient * 3600))
     # n.b. when the fan is running inside the pack, the module-to-pack
     # thermal conductivity is significantly increased -- so the time constant
     # is significantly shorter on the module-to-ambient equilibrium
     # n.b. these time constants are misleadingly named, as the thermosensors
-    # are on the modules rather than on the shell of the pack
-    EMA_parameter_pack_cooling <- ifelse(
+    # are on the modules rather than on the shell of the pack.  We hoist
+    # these computations from our scalar inner loop.
+    EMA_param <- ifelse(
       ((logtibble$charge_mode == 0) |
          (logtibble$est_pwr_a_c_50w == 0)),
-      EMA_parameter_pack_to_ambient,
-      EMA_parameter_pack_AC_to_ambient)
+      logtibble$EMA_parameter_pack_to_ambient,
+      logtibble$EMA_parameter_pack_AC_to_ambient
+    )
+    EMA_param_complement <- 1.0 - EMA_param
 
-    # the following is a manual TCO of the recursive filter
-    # $x_t = x_{t-1} + d_t + (a_t - x_{t-1} - d_t)\lambda$
-    # where $x_t$ is the pack temperature, $d_t$ is the heatflow from the cells,
-    # $a_t$ is the ambient temperature, and $\lambda$ is the time constant
-    # for heatflow from pack to ambient.
-
+    # the following is a manual TCO of the recursive filter $x_t =
+    # x_{t-1}(1-\lambda) + h_t + (a_t - x_{t-1})\lambda$ where $x_t$ is the pack
+    # temperature, $h_t$ is the heatflow into the cells, $a_t$ is the ambient
+    # temperature, and $\lambda$ is the time constant for heatflow from pack to
+    # ambient (in units of the sampling_interval, i.e. the relaxation parameter
+    # in an EMA)
     pred_temp_v <- pred_pack_avg_temp_v
-    pred_deltat_v <- pred_temp_v - lag(pred_temp_v, default = NULL)
-    # we hoist two vector-mode computations from the loop
-    ambient_heat_v <- logtibble$ambient * EMA_parameter_pack_cooling
-    EMA1 <- 1.0 - EMA_parameter_pack_cooling
-
+    heat_in_v <- pred_temp_v - dplyr::lag(pred_temp_v, default = NA)
+    ambient_v <- logtibble$ambient
     for (i in seq(nsegments)[which(!wexclude)]) {
       prevpred <- pred_temp_v[wstart[i]]
       for (j in seq(wstart[i] + 1, wend[i])) {  # a scalar inner loop, ouch!
-        nextpred <- (prevpred + pred_deltat_v[j]) * EMA1[j] + ambient_heat_v[j]
+        nextpred <- prevpred * EMA_param_complement[j] +
+          heat_in_v[j] +
+          (ambient_v[j] - prevpred) * EMA_param[j]
         pred_temp_v[j] <- nextpred
         prevpred <- nextpred  # loop-carried dependency
       }
     }
 
-    # we avoid skewing statistics of fit
+    # we introduce NA, to avoid skewing statistics of fit
     pred_temp_v[wstart] <- NA
     for (i in seq(nsegments)[which(wexclude)]) {
       pred_temp_v[wstart[i]:wend[i]] <- NA
@@ -447,7 +456,8 @@ predict_temp <- function(tmodel = NULL,
     maxpew <- which.max(logtibble$err_pred[from_idx:to_idx])
     minpe <- which.min(logtibble$err_pred)
     minpew <- which.min(logtibble$err_pred[from_idx:to_idx])
-    if ((to_idx - from_idx + 1) < length(logtibble$err_pred)) {
+    if ((trace > 1) &&
+        ((to_idx - from_idx + 1) < length(logtibble$err_pred))) {
       cat("Iteration", iternum, ":\n")
       cat("  Underprediction in window by",
           round(logtibble$err_pred[minpew], 2),
@@ -460,20 +470,26 @@ predict_temp <- function(tmodel = NULL,
           format_ISO8601(logtibble$date_time[maxpew]),
           "\n")
     }
-    if ((to_idx - from_idx + 1) >= length(logtibble$err_pred)) {
-      cat("Iteration", iternum, ":\n")
-    }
-    cat("  Underprediction in the full dataset by",
+    if (trace > 1) {
+      if ((to_idx - from_idx + 1)
+          >= length(logtibble$err_pred)) {
+        cat("Iteration", iternum, ":\n")
+      }
+      cat(
+        "  Underprediction in the full dataset by",
         round(logtibble$err_pred[minpe], 2),
         "degrees at",
         format_ISO8601(logtibble$date_time[minpe]),
-        "\n")
-    cat("  Overprediction in the full dataset by",
+        "\n"
+      )
+      cat(
+        "  Overprediction in the full dataset by",
         round(logtibble$err_pred[maxpe], 2),
         "degrees at",
         format_ISO8601(logtibble$date_time[maxpe]),
-        "\n")
-
+        "\n"
+      )
+    }
   }
 
   return(m)

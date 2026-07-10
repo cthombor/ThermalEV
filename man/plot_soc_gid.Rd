@@ -46,5 +46,5 @@ plot_soc_gid: plot a computed SOC and the reported SOC against gid
 }
 \examples{
 plot_soc_gid(eNV200ac24kWh_2025)
-plot_soc_gid(eNV200ac24kWh_2025, max_soc = 25)
+plot_soc_gid(eNV200ac24kWh_2025, max_soc_filter = 25)
 }

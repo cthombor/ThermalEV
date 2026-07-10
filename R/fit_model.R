@@ -8,7 +8,12 @@
 #' @param lambda_pack_AC_to_ambient in hours
 #' @param fan_power in W
 #' @param COP coefficient of heatpump performance, dimensionless
-#' @param fixed_parameters length-7 Boolean vector
+#' @param arrhenius_resistance in K, a primary parameter
+#' @param heat_capacity in J/K, a secondary parameter
+#' @param iter_count controls convergence on predicted temps
+#' @param min_segment_length shorter sequences of samples are ignored
+#' @param fixed_parameters length-7 Boolean vector, reduces dimension of opt
+#' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
@@ -26,7 +31,12 @@ fit_model <- function(m = NULL,
                       lambda_pack_AC_to_ambient = NA,
                       fan_power = NA,
                       COP = NA,
-                      fixed_parameters = c(F, F, F, F, T, T, T),
+                      arrhenius_resistance = NA,
+                      heat_capacity = NA,
+                      iter_count = 4,
+                      min_segment_length = 20,
+                      fixed_parameters = c(F, F, F, F, F, F, F),
+                      trace = 1,
                       from_date = NULL,
                       to_date = NULL,
                       from_idx = NULL,
@@ -43,7 +53,7 @@ fit_model <- function(m = NULL,
 #'
 #' @examples
 #' fm(c(500, 120, 8, 2, 300, 3))
-  fm <- function(x = c(packr, lambda1, lambda2, lambda3, fanp, COP)) {
+  fm <- function(x = c(packr, lambda1, lambda2, lambda3, fanp, COP, arr)) {
     m <- predict_temp(
       m,
       effective_pack_resistance = x[1],
@@ -51,7 +61,9 @@ fit_model <- function(m = NULL,
       lambda_pack_to_ambient = x[3],
       lambda_pack_AC_to_ambient = x[4],
       fan_power = x[5],
-      COP = x[6]
+      COP = x[6],
+      arr = x[7],
+      trace = trace
     )
     return(MSE_of_fit(m))
   }
@@ -83,6 +95,9 @@ fit_model <- function(m = NULL,
   if (!is.na(COP)) {
     m$parameters[["COP"]] <- COP
   }
+  if (!is.na(arrhenius_resistance)) {
+    m$parameters[["arrhenius_resistance"]] <- arrhenius_resistance
+  }
 
   # read a full set of primary factors into shorthand vars
   packr <- m$parameters[["effective_pack_resistance"]]
@@ -91,6 +106,7 @@ fit_model <- function(m = NULL,
   lambda3 <- m$parameters[["lambda_pack_AC_to_ambient"]]
   fanp <- m$parameters[["fan_power"]]
   COP <- m$parameters[["COP"]]
+  arr <- m$parameters[["arrhenius_resistance"]]
 
   # all logs "should" be sorted on date-time... but just in case...
   plotdata <- m$logdata |> arrange(date_time)
@@ -112,55 +128,59 @@ fit_model <- function(m = NULL,
   }
 
   origmodel <- m
-  m$logdata <- m$logdata |> slice(from_idx:to_idx)
+  m$logdata <- m$logdata |> slice(from_idx:to_idx) # restricted range model
 
   # n.b. the box-constrained optimisation of L-BFGS-B throws an error if any
   # dimension of the box is zero, so we add an epsilon and hope for the best
   bestfit <- optim(
-    par = c(packr, lambda1, lambda2, lambda3, fanp, COP),
-    fm,
+    par = c(packr, lambda1, lambda2, lambda3, fanp, COP, arr),
+    fn = fm,
     lower = c(if (fixed_parameters[1]) packr else 100,
               if (fixed_parameters[2]) lambda1 else 0,
               if (fixed_parameters[3]) lambda2 else 0,
               if (fixed_parameters[4]) lambda3 else 0,
               if (fixed_parameters[5]) fanp else 0,
-              if (fixed_parameters[6]) COP else 0),
-    upper = c(if (fixed_parameters[1]) packr + 0.01 else 1200,
-              if (fixed_parameters[2]) lambda1 + 0.001 else 100,
-              if (fixed_parameters[3]) lambda2 + 0.0001 else 10,
-              if (fixed_parameters[4]) lambda3 + 0.0001 else 10,
-              if (fixed_parameters[5]) fanp + 0.01 else 500,
-              if (fixed_parameters[6]) COP + 0.0001 else 5),
-    control = list(maxit = 2),
+              if (fixed_parameters[6]) COP else 0.1,
+              if (fixed_parameters[7]) arr else -6000),
+    upper = c(if (fixed_parameters[1]) packr + 10 else 1200,
+              if (fixed_parameters[2]) lambda1 + 10 else 100,
+              if (fixed_parameters[3]) lambda2 + 0.2 else 10,
+              if (fixed_parameters[4]) lambda3 + 0.2 else 10,
+              if (fixed_parameters[5]) fanp + 100 else 1000,
+              if (fixed_parameters[6]) COP + 0.1 else 5,
+              if (fixed_parameters[7]) arr - 20 else -2000),
+    control = list(maxit = iter_count,
+                   ndeps = c(50, 5, 0.5, 0.5, 500, 0.1, 100)),
+    #    parscale = c(1000, 10, 1, 1, 100, 1, 1000),
+    #
     method = "L-BFGS-B")
 
   # remove epsilons from the best-fit of fixed parameters
   best_packr = if (fixed_parameters[1]) packr else bestfit$par[1]
   best_lambda1 = if (fixed_parameters[2]) lambda1 else bestfit$par[2]
-  best_lambda2 = if (fixed_parameters[3]) lambda1 else bestfit$par[3]
-  best_lambda3 = if (fixed_parameters[4]) lambda1 else bestfit$par[4]
+  best_lambda2 = if (fixed_parameters[3]) lambda2 else bestfit$par[3]
+  best_lambda3 = if (fixed_parameters[4]) lambda3 else bestfit$par[4]
   best_fanp = if (fixed_parameters[5]) fanp else bestfit$par[5]
   best_COP = if (fixed_parameters[6]) COP else bestfit$par[6]
+  best_arr = if (fixed_parameters[7]) arr else bestfit$par[7]
 
   # evaluate predict_temp() on the best_fit parameters
-  m <- predict_temp(
-    m,
-    effective_pack_resistance = best_packr,
-    lambda_cell_to_pack = best_lambda1,
-    lambda_pack_to_ambient = best_lambda2,
-    lambda_pack_AC_to_ambient = best_lambda3,
-    fan_power = best_fanp,
-    COP = best_COP
-  )
-  if (abs(bestfit$value - MSE_of_fit(m)) > 0.05) {
-    warning(c("Fixed best-fit parameters are highly sensitive.",
-            " Mean square error epsilon-differential: (",
-            MSE_of_fit(m),
-            ",", bestfit$value, ")"))
-    #n.b. we assume that optim() never returns a value outside the limiting box
-  }
   if ((to_idx - from_idx + 1) < length(origmodel$logdata$err_pred)) {
-    cat("MSE of fit over the specified range:", bestfit$value, "\n")
+    m <- predict_temp(
+      m,
+      effective_pack_resistance = best_packr,
+      lambda_cell_to_pack = best_lambda1,
+      lambda_pack_to_ambient = best_lambda2,
+      lambda_pack_AC_to_ambient = best_lambda3,
+      fan_power = best_fanp,
+      COP = best_COP,
+      arrhenius_resistance = best_arr,
+      heat_capacity = heat_capacity,
+      iter_count = iter_count,
+      min_segment_length = min_segment_length,
+      trace = trace
+    )
+    cat("MSE of fit over the specified range:", MSE_of_fit(m), "\n")
   }
 
   origmodel <- predict_temp(
@@ -170,7 +190,12 @@ fit_model <- function(m = NULL,
     lambda_pack_to_ambient = best_lambda2,
     lambda_pack_AC_to_ambient = best_lambda3,
     fan_power = best_fanp,
-    COP = best_COP
+    COP = best_COP,
+    arrhenius_resistance = best_arr,
+    heat_capacity = heat_capacity,
+    iter_count = iter_count,
+    min_segment_length = min_segment_length,
+    trace = trace
   )
   cat("MSE of fit over the full dataset:", MSE_of_fit(origmodel), "\n")
 

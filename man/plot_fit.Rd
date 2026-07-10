@@ -24,8 +24,6 @@ an Environment
 #todo: dispatch through generic plot()
 }
 \examples{
-plot_fit(predict_temp())
-plot_fit(predict_temp(), to_idx = 10)
-plot_fit(predict_temp(), to_date = "2026-01-26 11:00")
-plot_fit(fit_model())
+plot_fit(eNV200noac50kWh, from_idx = 1, to_idx = 10)
+plot_fit(eNV200ac50kWh, "2026-01-26 11:00", "2026-01-27")
 }
