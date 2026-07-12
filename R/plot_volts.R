@@ -26,52 +26,54 @@ plot_volts <- function(m,
                      max_sgids = NULL,
                      temp_colours = FALSE)
 {
-  pd <- m$logdata |>
-    select(date_time, gids, soc, soh, pack_volts, pack_avg_temp,
-           pack_amps) |>
-    mutate(gids_scaled = gids / (soh / 100),
-           soc = soc / 1e4) |>
-    mutate(pack_volts = ifelse(pack_volts == 0, NA, pack_volts)) |>
-    mutate(gids_scaled = ifelse(gids_scaled == 0, NA, gids_scaled)) |>
-    mutate(gids_ratio = gids_scaled / soc) |>
-    arrange(date_time)
-
+  pd <- m$logdata |> arrange(date_time)
   # curiously, xts insists on UTC for stored dates & times
+  if (!is.null(from_date)) {
+    from_date <- as.POSIXct(from_date, tz = "UTC")
+  }
+  if (!is.null(to_date)) {
+    to_date <- as.POSIXct(to_date, tz = "UTC")
+  }
   from_idx <- ifelse(is.null(from_date),
                      ifelse(is.null(from_idx), 1, from_idx),
-                     dplyr::first(which(
-                       plotdata$date_time >= as.POSIXct(from_date, tz = "UTC")
-                     )))
+                     dplyr::first(which(pd$date_time >= from_date)))
   to_idx <- ifelse(is.null(to_date),
                    ifelse(is.null(to_idx), nrow(m$logdata), to_idx),
-                   dplyr::last(which(
-                     plotdata$date_time <= as.POSIXct(to_date, tz = "UTC")
-                   )))
+                   dplyr::last(which(pd$date_time <= to_date)))
   if (is.na(from_idx) || is.na(to_idx)) {
     warning("Date out of range")
-  } else if (from_idx >= to_idx) {
-    warning("from_date is not before to_date")
-  }
-  pd <- pd |> slice(from_idx:to_idx)
-  if (!is.null(max_sgids))
-    pd <- pd[(pd$gids_scaled <= max_sgids), ]
-  if (!is.null(min_sgids))
-    pd <- pd[(pd$gids_scaled >= min_sgids), ]
-
-  if (nrow(pd) == 0) {
-    warning("No data to plot!")
-  }
-
-  if (temp_colours) {
-    ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
-      theme(palette.colour.continuous = "Okabe-Ito") +
-      labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
-      geom_point(aes(colour = pack_avg_temp))
+  } else if (to_idx < from_idx) {
+    warning("No data in this range")
   } else {
-    ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
-      theme(palette.colour.continuous = "Okabe-Ito") +
-      labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
-      geom_point(aes(colour = pack_amps))
-  }
+    pd <- pd |>
+      slice(from_idx:to_idx) |>
+      select(date_time, gids, soc, soh, pack_volts, pack_avg_temp,
+             pack_amps) |>
+      mutate(gids_scaled = gids / (soh / 100),
+             soc = soc / 1e4) |>
+      mutate(pack_volts = ifelse(pack_volts == 0, NA, pack_volts)) |>
+      mutate(gids_scaled = ifelse(gids_scaled == 0, NA, gids_scaled)) |>
+      mutate(gids_ratio = gids_scaled / soc)
 
+    if (!is.null(max_sgids))
+      pd <- pd[(pd$gids_scaled <= max_sgids), ]
+    if (!is.null(min_sgids))
+      pd <- pd[(pd$gids_scaled >= min_sgids), ]
+
+    if (nrow(pd) == 0) {
+      warning("No data to plot!")
+    }
+
+    if (temp_colours) {
+      ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
+        theme(palette.colour.continuous = "Okabe-Ito") +
+        labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
+        geom_point(aes(colour = pack_avg_temp))
+    } else {
+      ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
+        theme(palette.colour.continuous = "Okabe-Ito") +
+        labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
+        geom_point(aes(colour = pack_amps))
+    }
+  }
 }

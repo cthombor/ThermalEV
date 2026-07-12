@@ -15,8 +15,9 @@ fit_model(
   arrhenius_resistance = NA,
   heat_capacity = NA,
   iter_count = 4,
-  min_segment_length = 10,
-  fixed_parameters = c(F, F, F, F, T, T, T),
+  min_segment_length = 20,
+  fixed_parameters = c(F, F, F, F, F, F, F),
+  trace = 1,
   from_date = NULL,
   to_date = NULL,
   from_idx = NULL,
@@ -47,6 +48,8 @@ fit_model(
 \item{min_segment_length}{shorter sequences of samples are ignored}
 
 \item{fixed_parameters}{length-7 Boolean vector, reduces dimension of opt}
+
+\item{trace}{0 for silent, 1 for minimal, 2 for verbose}
 
 \item{from_date}{starting date/time}
 
