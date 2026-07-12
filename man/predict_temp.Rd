@@ -15,7 +15,8 @@ predict_temp(
   arrhenius_resistance = NA,
   heat_capacity = NA,
   iter_count = 4,
-  min_segment_length = 10,
+  min_segment_length = 20,
+  trace = 2,
   logfilnm = "log26Jan2026.csv",
   logfildir = "data-raw",
   from_date = NULL,
@@ -46,6 +47,8 @@ predict_temp(
 \item{iter_count}{controls convergence on predicted temps}
 
 \item{min_segment_length}{shorter sequences of samples are ignored}
+
+\item{trace}{0 for silent, 1 for minimal, 2 for verbose}
 
 \item{logfilnm}{name of a csv logfile to be read, if is.null(tmodel)}
 
