@@ -65,7 +65,7 @@ predict_temp <- function(tmodel = NULL,
                          heat_capacity = NA,
                          iter_count = 4,
                          min_segment_length = 20,
-                         trace = 1,
+                         trace = 2,
                          logfilnm = "log26Jan2026.csv",
                          logfildir = "data-raw",
                          from_date = NULL,
@@ -137,12 +137,12 @@ predict_temp <- function(tmodel = NULL,
   }
   # n.b. additional secondary parameters may be stored in m$parameters
 
-  if (COP < 0.01) {
-    COP <- 0.01
-    warning("The minimum COP of a fit is 0.01\n")
-    # avoids runaway negative COP in optim() on low fan_power, when it's the
-    # effective pack resistance which is causing the heat gain during a
-    # fastcharge
+  if (COP < 0.0) {
+    COP <- 0.0
+    warning("The minimum COP of a fit is 0.0\n")
+    # avoids a possible runaway negative COP in optim() if fan_power is low.
+    # (It's the effective pack resistance which causes most of the heat gain
+    # during a fastcharge.)
   }
 
   if (!"delta_t" %in% names(logtibble)) {
@@ -311,6 +311,45 @@ predict_temp <- function(tmodel = NULL,
         .before = cp1
       )
 
+    # we use an Exponential Moving Average filter on a per-sample basis:
+    # inaccurate if there are many missing samples -- but easily coded as a
+    # recursion, and quite efficient if compiled in C for any modern
+    # (deeply-pipelined) CPU.  Furthermore, it is undistorted by the roundoff
+    # errors in the time-stamps (at 1-second precision!) on the samples.
+    # Annoyingly, the tidyverse has no support for recursive filtering, and the
+    # vector-FORTRAN execution model of R is hostile to recursive function
+    # calls. Any EMA could be implemented as a tail-recursion in sapply() -- but
+    # only if we assume that it will if we assume it will always perform a
+    # sequential, in-order execution of its FUN.  An R that's optimised for a
+    # vector supercomputer could thus implement an sapply() which fully reads
+    # all of its inputs before computing any outputs -- and fail to which would
+    # thus fail to implement the loop-carried dependency of an iterative
+    # implementation of a tail recursion. See stackoverflow.com/
+    # questions/49348870/tibbletime-previous-days-close/49373709#
+    # comment140995212_49373709 and github.com/tidyverse/dbplyr/issues/1108
+
+    # We predict the delta-heating as measured at the thermosensors (in K), with
+    # exponential lag, grouped by the gaps in the sampling.  The lag is much
+    # more significant in the 50kWh pack, perhaps because there are only four
+    # modules (with thermosensors mounted on their exterior), whereas in the
+    # original-equipment 24kWh pack, there are 48 modules of which four have
+    # thermosensors (which -- apparently -- are in good thermal contact with the
+    # cells inside)
+    unlagged_heat <- as.xts(logtibble$pred_heating_unlagged, logtibble$date_time)
+    lagged_heat <- as.xts(vector(mode = "double",
+                                 length = length(unlagged_heat)),
+                          logtibble$date_time)
+    for (i in seq(nsegments)[which(!wexclude)]) {
+      EMA_param_1 <- logtibble$EMA_parameter_cell_to_pack[wstart[1]]
+      lagged_heat[wstart[i]:wend[i]] <-
+        stats::filter(
+          unlagged_heat[wstart[i]:wend[i]] * EMA_param_1,
+          1. - EMA_param_1,
+          method = "recursive",
+          init = 0.
+        )
+    }
+
     # unlagged pack-cooling wattage, assuming that if charge_mode==1, then
     # any A/C power above fan_power is running the A/C compressor and its
     # refrigerant is being circulated through the pack's evaporator
@@ -328,99 +367,47 @@ predict_temp <- function(tmodel = NULL,
         .before = cp1
       )
 
-    # we use an Exponential Moving Average filter on a per-sample basis:
-    # inaccurate if there are many missing samples -- but easily coded as a
-    # recursion, and quite efficient if compiled in C for any modern
-    # (deeply-pipelined) CPU.  Furthermore, it is undistorted by the roundoff
-    # errors in the time-stamps (at 1-second precision!) on the samples.
-    # Annoyingly, the tidyverse has no support for recursive filtering, and the
-    # vector-FORTRAN execution model of R is hostile to recursive function
-    # calls. Any EMA could be implemented as a tail-recursion in sapply() -- but
-    # only if we assume that it will if we assume it will always perform a
-    # sequential, in-order execution of its FUN.  An R that's optimised for a
-    # vector supercomputer would read all of its inputs fully -- and fail to
-    # handle the loop-carried dependency of an iterative implementation of a
-    # tail recursion. See stackoverflow.com/
-    # questions/49348870/tibbletime-previous-days-close/49373709#
-    # comment140995212_49373709 and github.com/tidyverse/dbplyr/issues/1108
-
-    # predicted delta-heating of pack (in K), with exponential lag, grouped
-    # by the gaps in the sampling
-    unlagged_heat <- as.xts(logtibble$pred_heating_unlagged, logtibble$date_time)
-    lagged_heat <- as.xts(vector(mode = "double",
-                                 length = length(unlagged_heat)),
-                          logtibble$date_time)
-    for (i in seq(nsegments)[which(!wexclude)]) {
-      EMA_param_1 <- logtibble$EMA_parameter_cell_to_pack[wstart[1]]
-      lagged_heat[wstart[i]:wend[i]] <-
-        stats::filter(
-          unlagged_heat[wstart[i]:wend[i]] * EMA_param_1,
-          1. - EMA_param_1,
-          method = "recursive",
-          init = 0.
-        )
-    }
-
-    # we now revert to base R, to implement EMAs beyond the scope of
+    # we now revert to base R, to implement an EMA that is outside the scope of
     # stats:filter()
-    pack_deltas_v <- as.vector(lagged_heat[,1,drop=TRUE]) -
-      logtibble$cooling_heatpump_unlagged
-
-    # predict pack temps from the observations at wstart, plus the cumsum of
-    # lagged delta-heat in each segment
-    pred_pack_avg_temp_v <- logtibble$pack_avg_temp
-    for (i in seq(nsegments)[which(!wexclude)]) {
-      # predictions at !wstart
-      obsi <- pred_pack_avg_temp_v[wstart[i]]
-      deltasi <- pack_deltas_v[(wstart[i] + 1) : wend[i]]
-      pred_pack_avg_temp_v[(wstart[i] + 1) : wend[i]] <-
-        rep(obsi, (wend[i] - wstart[i])) + cumsum(deltasi)
-    }
-
-    # Cool (or warm!) the pack via convection to the ambient air
+    #
+    # n.b. when the fan is running inside the pack, the module-to-pack thermal
+    # conductivity is significantly increased -- so the time constant is
+    # significantly shorter on the module-to-ambient equilibrium
     #
     # TODO: determine if the pack_to_ambient time constant should decrease with
     # the vehicle's velocity
     #
-    # N.b. the computational kernel of this filter could be executed efficiently
-    # if compiled for a superscalar CPU, but must be expressed as an inefficient
-    # scalar-mode computation in R's variant of vector-Fortran.
-
-    # n.b. when the fan is running inside the pack, the module-to-pack
-    # thermal conductivity is significantly increased -- so the time constant
-    # is significantly shorter on the module-to-ambient equilibrium
-    # n.b. these time constants are misleadingly named, as the thermosensors
-    # are on the modules rather than on the shell of the pack.  We hoist
-    # these computations from our scalar inner loop.
-    EMA_param <- ifelse(
+    # We hoist the following computations from our scalar inner loop.
+    EMA_param_23 <- ifelse(
       ((logtibble$charge_mode == 0) |
          (logtibble$est_pwr_a_c_50w == 0)),
-      logtibble$EMA_parameter_pack_to_ambient,
-      logtibble$EMA_parameter_pack_AC_to_ambient
+      logtibble$EMA_parameter_pack_to_ambient, # \lambda_2
+      logtibble$EMA_parameter_pack_AC_to_ambient # \lambda_3
     )
-    EMA_param_complement <- 1.0 - EMA_param
+    EMA_param_23_complement <- 1.0 - EMA_param_23
 
     # the following is a manual TCO of the recursive filter $x_t =
-    # x_{t-1}(1-\lambda) + h_t + (a_t - x_{t-1})\lambda$ where $x_t$ is the pack
-    # temperature, $h_t$ is the heatflow into the cells, $a_t$ is the ambient
-    # temperature, and $\lambda$ is the time constant for heatflow from pack to
-    # ambient (in units of the sampling_interval, i.e. the relaxation parameter
-    # in an EMA)
-    pred_temp_v <- pred_pack_avg_temp_v
-    heat_in_v <- pred_temp_v - dplyr::lag(pred_temp_v, default = NA)
+    # x_{t-1}(1-\lambda) + h_t + a_t \lambda$ where $x_t$ is the pack
+    # temperature, $h_t$ is the heatflow into the cells (in K), $a_t$ is the
+    # ambient temperature, and $\lambda$ is the time constant for heatflow from
+    # pack to ambient (in units of the sampling_interval, rather than seconds or
+    # hours)
+    pred_temp_v <- logtibble$pack_avg_temp
+    heat_in_v <- as.vector(lagged_heat[,1,drop=TRUE]) -
+      logtibble$cooling_heatpump_unlagged
     ambient_v <- logtibble$ambient
     for (i in seq(nsegments)[which(!wexclude)]) {
       prevpred <- pred_temp_v[wstart[i]]
       for (j in seq(wstart[i] + 1, wend[i])) {  # a scalar inner loop, ouch!
-        nextpred <- prevpred * EMA_param_complement[j] +
+          nextpred <- prevpred * EMA_param_23_complement[j] +
           heat_in_v[j] +
-          (ambient_v[j] - prevpred) * EMA_param[j]
+          ambient_v[j] * EMA_param_23[j]
         pred_temp_v[j] <- nextpred
         prevpred <- nextpred  # loop-carried dependency
       }
     }
 
-    # we introduce NA, to avoid skewing statistics of fit
+    # we mask unpredicted temps with NA, to avoid skewing statistics of fit
     pred_temp_v[wstart] <- NA
     for (i in seq(nsegments)[which(wexclude)]) {
       pred_temp_v[wstart[i]:wend[i]] <- NA
@@ -458,37 +445,38 @@ predict_temp <- function(tmodel = NULL,
     minpew <- which.min(logtibble$err_pred[from_idx:to_idx])
     if ((trace > 1) &&
         ((to_idx - from_idx + 1) < length(logtibble$err_pred))) {
-      cat("Iteration", iternum, ":\n")
-      cat("  Underprediction in window by",
+      cat("Iteration",
+          iternum,
+          ": Prediction error in window: (",
           round(logtibble$err_pred[minpew], 2),
-          "degrees at",
-          format_ISO8601(logtibble$date_time[minpew]),
-          "\n")
-      cat("  Overprediction in window by",
+          ",",
           round(logtibble$err_pred[maxpew], 2),
-          "degrees at",
-          format_ISO8601(logtibble$date_time[maxpew]),
-          "\n")
+          ")\n")
+      if (iternum == iter_count) {
+        cat("    at (",
+            format_ISO8601(logtibble$date_time[minpew]),
+            ",",
+            format_ISO8601(logtibble$date_time[maxpew]),
+            ")\n")
+      }
     }
     if (trace > 1) {
-      if ((to_idx - from_idx + 1)
-          >= length(logtibble$err_pred)) {
-        cat("Iteration", iternum, ":\n")
+      cat("Iteration",
+          iternum,
+          ": Prediction error in the full dataset: (",
+          round(logtibble$err_pred[minpe], 2),
+          ",",
+          round(logtibble$err_pred[maxpe], 2),
+          ")\n"
+      )
+      if (iternum == iter_count) {
+        cat("    at (",
+            format_ISO8601(logtibble$date_time[minpe]),
+            ",",
+            format_ISO8601(logtibble$date_time[maxpe]),
+            ")\n"
+        )
       }
-      cat(
-        "  Underprediction in the full dataset by",
-        round(logtibble$err_pred[minpe], 2),
-        "degrees at",
-        format_ISO8601(logtibble$date_time[minpe]),
-        "\n"
-      )
-      cat(
-        "  Overprediction in the full dataset by",
-        round(logtibble$err_pred[maxpe], 2),
-        "degrees at",
-        format_ISO8601(logtibble$date_time[maxpe]),
-        "\n"
-      )
     }
   }
 

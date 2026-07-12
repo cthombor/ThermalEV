@@ -47,13 +47,13 @@ default_params <- function(m) {
                            ifelse(m$capacity == 24, 550, 360),
                          lambda_cell_to_pack =
                            ifelse(m$capacity == 24, 0, 240),
-                         lambda_pack_to_ambient = 7.5,
+                         lambda_pack_to_ambient = 10,
                          lambda_pack_AC_to_ambient =
-                           ifelse(m$model == "e-NV200", 2.0, 7.5),
+                           ifelse(m$model == "e-NV200", 1.33, 10),
                          fan_power =
-                           ifelse(m$model == "e-NV200", 900, 0),
+                           ifelse(m$model == "e-NV200", 300, 0),
                          COP = ifelse(m$model == "e-NV200", 3.0, 0),
-                         arrhenius_resistance = -3500,
+                         arrhenius_resistance = -2000,
                          heat_capacity = 1.0e6
                          )
   }
