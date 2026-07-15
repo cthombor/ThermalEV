@@ -1,7 +1,19 @@
-# thmodel: S3 class constructors and helpers
+# thmodel: S3 class constructors and helpers. sets defaults for params.
 
 #' new_thmodel.  A lean-and-mean constructor, defining only the names and
 #' classes of the required fields.
+#'
+#' I'm relying on Kubal (2022, https://doi.org/10.1016/j.jpowsour.2022.231864)
+#' for an estimation of the effective activation energy in the temperature
+#' dependence (as estimated by Arrhenius' equation) of the effective resistance
+#' of the NCM811 (or perhaps NCM632) cells in the Nissan packs under test.
+#' An activation energy in the range [-27,31] J/Kmol corresponds to a
+#' slope in the range [-3250, -3730] of the log-resistance of the pack (for
+#' purposes of a Joule-heating estimation) as a function of temperature.  I
+#' have validated -3500 as a plausible fit to the temperature-dependence of
+#' the (inaccurately-predicted) effective resistance of the pack, and I don't
+#' have anywhere near enough data to form a more accurate estimate of the
+#' arrhenius_resistance parameter in my model of the pack's thermal behaviour.
 #'
 #' @returns thmodel, a named list
 #' @export
@@ -53,7 +65,7 @@ default_params <- function(m) {
                          fan_power =
                            ifelse(m$model == "e-NV200", 300, 0),
                          COP = ifelse(m$model == "e-NV200", 3.0, 0),
-                         arrhenius_resistance = -2000,
+                         arrhenius_resistance = -3500,
                          heat_capacity = 1.0e6
                          )
   }
