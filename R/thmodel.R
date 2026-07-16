@@ -1,7 +1,7 @@
 # thmodel: S3 class constructors and helpers. sets defaults for params.
 
 #' new_thmodel.  A lean-and-mean constructor, defining only the names and
-#' classes of the required fields.
+#' classes of the required fields, and setting defaults for params.
 #'
 #' I'm relying on Kubal (2022, https://doi.org/10.1016/j.jpowsour.2022.231864)
 #' for an estimation of the effective activation energy in the temperature
@@ -56,10 +56,11 @@ new_thmodel <- function() {
 default_params <- function(m) {
   if (length(m$parameters) == 0) {
     m$parameters <- list(effective_pack_resistance =
-                           ifelse(m$capacity == 24, 550, 360),
+                           ifelse(m$capacity == 24, 550, 300),
                          lambda_cell_to_pack =
                            ifelse(m$capacity == 24, 0, 240),
-                         lambda_pack_to_ambient = 10,
+                         lambda_pack_to_ambient =
+                           ifelse(m$capacity == 24, 10, 6),
                          lambda_pack_AC_to_ambient =
                            ifelse(m$model == "e-NV200", 1.33, 10),
                          fan_power =
