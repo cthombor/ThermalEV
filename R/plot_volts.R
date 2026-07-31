@@ -7,7 +7,7 @@
 #' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
 #' @param min_sgids high-pass filter on scaled gids (to examine non-linearity)
 #' @param max_sgids low-pass filter on scaled gids (to examine non-linearity)
-#' @param temp_colours TRUE adds colours for temps, FALSE for pack_amps
+#' @param scale_colours colours show pack_temp (0), pack_amps (1), pack_kW (2)
 #'
 #' @returns an Environment
 #' @export
@@ -24,7 +24,7 @@ plot_volts <- function(m,
                      to_idx = NULL,
                      min_sgids = NULL,
                      max_sgids = NULL,
-                     temp_colours = FALSE)
+                     scale_colours = 0)
 {
   pd <- m$logdata |> arrange(date_time)
   # curiously, xts insists on UTC for stored dates & times
@@ -46,15 +46,20 @@ plot_volts <- function(m,
     warning("No data in this range")
   } else {
     pd <- pd |>
-      slice(from_idx:to_idx) |>
+      slice(from_idx:to_idx)
+    min_Hx <- round(min(pd$hx), 0)
+    max_Hx <- round(max(pd$hx), 0)
+    min_SOH <- round(min(pd$soh), 0)
+    max_SOH <- round(max(pd$soh), 0)
+    pd <- pd |>
       select(date_time, gids, soc, soh, pack_volts, pack_avg_temp,
              pack_amps) |>
       mutate(gids_scaled = gids / (soh / 100),
-             soc = soc / 1e4) |>
-      mutate(pack_volts = ifelse(pack_volts == 0, NA, pack_volts)) |>
-      mutate(gids_scaled = ifelse(gids_scaled == 0, NA, gids_scaled)) |>
-      mutate(gids_ratio = gids_scaled / soc)
-
+             soc = soc / 1e4,
+             pack_volts = ifelse(pack_volts == 0, NA, pack_volts),
+             pack_kW = pack_amps * pack_volts / 1000,
+             gids_scaled = ifelse(gids_scaled == 0, NA, gids_scaled),
+             gids_ratio = gids_scaled / soc)
     if (!is.null(max_sgids))
       pd <- pd[(pd$gids_scaled <= max_sgids), ]
     if (!is.null(min_sgids))
@@ -64,16 +69,24 @@ plot_volts <- function(m,
       warning("No data to plot!")
     }
 
-    if (temp_colours) {
-      ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
+    if (scale_colours == 0) {
+      e <- ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
         theme(palette.colour.continuous = "Okabe-Ito") +
-        labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
         geom_point(aes(colour = pack_avg_temp))
-    } else {
-      ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
+    } else if (scale_colours == 1) {
+      e <- ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
         theme(palette.colour.continuous = "Okabe-Ito") +
-        labs(title = paste0(m$name, ": from #", from_idx, " to #", to_idx)) +
         geom_point(aes(colour = pack_amps))
+    } else {
+      e <- ggplot(pd, aes(x=gids_scaled, y=pack_volts)) +
+        theme(palette.colour.continuous = "Okabe-Ito") +
+        geom_point(aes(colour = pack_kW))
     }
+    e + labs(title = paste0(m$name,
+                            ": from #", from_idx,
+                            " to #", to_idx,
+                            ". Hx = (", min_Hx, ", ", max_Hx, ")",
+                            ", SOH = (", min_SOH, ", ", max_SOH, ")"
+                            ))
   }
 }
