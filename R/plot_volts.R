@@ -52,8 +52,8 @@ plot_volts <- function(m,
     min_SOH <- round(min(pd$soh), 0)
     max_SOH <- round(max(pd$soh), 0)
     pd <- pd |>
-      select(date_time, gids, soc, soh, pack_volts, pack_avg_temp,
-             pack_amps) |>
+#      select(date_time, gids, soc, soh, pack_volts, pack_avg_temp,
+#             pack_amps) |>
       mutate(gids_scaled = gids / (soh / 100),
              soc = soc / 1e4,
              pack_volts = ifelse(pack_volts == 0, NA, pack_volts),

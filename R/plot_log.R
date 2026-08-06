@@ -44,11 +44,13 @@ plot_log <- function(m,
   firstodo <- plotdata$odo_km[
     dplyr::first(which(!is.na(plotdata$odo_km)))]
 
-  #n.b. we plot data from speed sensor 1 rather than the GPS-reported speed
-  #there's a second speed sensor, presumably on the other wheel, and which may
-  #be calibrated differently or maybe has a different mean value because
-  #turns in one direction are significantly more common.  The outside wheel
-  #must turn faster than the inside wheel (if neither is skidding).
+  #n.b. I plot data from what LeafSpy describes as speed sensor 1 rather than
+  #from the "sensor 2" or the GPS-reported speed. The GPS reports are
+  #incomplete, and I'd expect them to be inaccurate on curvy roads.  Empirical
+  #evidence strongly suggests to me that Speed2 is the (significantly
+  #over-reported) value reported on the dashboard, and that the smaller Speed1
+  #value is a best-effort estimation of speed (which I presume would be unbiased
+  #if the vehicle has stock wheels and newly-fitted tyres).
   x <- plotdata |>
     mutate(distance = odo_km - firstodo,
            'distance/10' = distance / 10,
