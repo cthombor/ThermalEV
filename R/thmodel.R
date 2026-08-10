@@ -1,13 +1,13 @@
 # thmodel: S3 class constructors and helpers. sets defaults for params.
 
 #' new_thmodel.  A lean-and-mean constructor, defining only the names and
-#' classes of the required fields, and setting defaults for params.
+#' classes of the required fields.
 #'
 #' I'm relying on Kubal (2022, https://doi.org/10.1016/j.jpowsour.2022.231864)
 #' for an estimation of the effective activation energy in the temperature
 #' dependence (as estimated by Arrhenius' equation) of the effective resistance
 #' of the NCM811 (or perhaps NCM632) cells in the Nissan packs under test.
-#' An activation energy in the range [-27,31] J/Kmol corresponds to a
+#' An activation energy in the range from -27 to -31 kJ/mol corresponds to a
 #' slope in the range [-3250, -3730] of the log-resistance of the pack (for
 #' purposes of a Joule-heating estimation) as a function of temperature.  I
 #' have validated -3500 as a plausible fit to the temperature-dependence of
@@ -35,42 +35,15 @@ new_thmodel <- function() {
       fit = list(),
       # if length(m$fit) > 0, m$fit must be the result of an nlm(),
       # and the parameters must be the best-fit estimates found by nlm()
-      logdata = tibble()
+      logdata = tibble(),
       # if logdata has any rows, then this must be a log from
       # LeafSpy as munged by munge_logfile, with additional columns
       # from thmodel.predict_temp() on the parameters
+      ocvdata = tibble()
+      # if ocvdata has any rows, then this must be an estimate of the OCV
+      # at 25 °C, as a function of SOC.
     )
   m <- structure(m, class = "thmodel")
-  return(m)
-}
-
-#' default_params: sets thmodel params to default values, if the parameter
-#' list has length 0
-#'
-#' @param m a thmodel
-#'
-#' @returns a thmodel with all required params set
-#' @export
-#'
-#' @examples default_params(new_thmodel())
-default_params <- function(m) {
-  if (length(m$parameters) == 0) {
-    m$parameters <- list(effective_pack_resistance =
-                           ifelse(m$capacity == 24, 550, 300),
-                         lambda_cell_to_pack =
-                           ifelse(m$capacity == 24, 0, 240),
-                         lambda_pack_to_ambient =
-                           ifelse(m$capacity == 24, 10, 6),
-                         lambda_pack_AC_to_ambient =
-                           ifelse(m$model == "e-NV200", 1.33, 10),
-                         fan_power =
-                           ifelse(m$model == "e-NV200", 300, 0),
-                         COP = ifelse(m$model == "e-NV200", 3.0, 0),
-                         arrhenius_resistance = -3500,
-                         heat_capacity = 1.0e6
-                         )
-  }
-  m$modified.last.time <- now()
   return(m)
 }
 

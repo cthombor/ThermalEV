@@ -3,9 +3,9 @@
 #' @param m a thmodel
 #'
 #' @param effective_pack_resistance in mOhms
-#' @param lambda_cell_to_pack in seconds
-#' @param lambda_pack_to_ambient in hours
-#' @param lambda_pack_AC_to_ambient in hours
+#' @param polarisation_energy in kJ/V
+#' @param lambda_module_to_ambient in hours
+#' @param lambda_module_to_ambient in hours
 #' @param fan_power in W
 #' @param COP coefficient of heatpump performance, dimensionless
 #' @param arrhenius_resistance in K, a primary parameter
@@ -26,9 +26,9 @@
 #' m <- fit_model(print.level = 2)
 fit_model <- function(m = NULL,
                       effective_pack_resistance = NA,
-                      lambda_cell_to_pack = NA,
-                      lambda_pack_to_ambient = NA,
-                      lambda_pack_AC_to_ambient = NA,
+                      polarisation_energy = NA,
+                      lambda_module_to_ambient = NA,
+                      lambda_module_AC_to_ambient = NA,
                       fan_power = NA,
                       COP = NA,
                       arrhenius_resistance = NA,
@@ -53,13 +53,13 @@ fit_model <- function(m = NULL,
 #'
 #' @examples
 #' fm(c(500, 120, 8, 2, 300, 3))
-  fm <- function(x = c(packr, lambda1, lambda2, lambda3, fanp, COP, arr)) {
+  fm <- function(x = c(packr, pe, lp, la, fanp, COP, arr)) {
     m <- predict_temp(
       m,
       effective_pack_resistance = x[1],
-      lambda_cell_to_pack = x[2],
-      lambda_pack_to_ambient = x[3],
-      lambda_pack_AC_to_ambient = x[4],
+      polarisation_energy = x[2],
+      lambda_module_to_ambient = x[3],
+      lambda_module_AC_to_ambient = x[4],
       fan_power = x[5],
       COP = x[6],
       arr = x[7],
@@ -80,14 +80,14 @@ fit_model <- function(m = NULL,
   if (!is.na(effective_pack_resistance)) {
     m$parameters[["effective_pack_resistance"]] <- effective_pack_resistance
   }
-  if (!is.na(lambda_cell_to_pack)) {
-    m$parameters[["lambda_cell_to_pack"]] <- lambda_cell_to_pack
+  if (!is.na(polarisation_energy)) {
+    m$parameters[["polarisation_energy"]] <- polarisation_energy
   }
-  if (!is.na(lambda_pack_to_ambient)) {
-    m$parameters[["lambda_pack_to_ambient"]] <- lambda_pack_to_ambient
+  if (!is.na(lambda_module_to_ambient)) {
+    m$parameters[["lambda_module_to_ambient"]] <- lambda_module_to_ambient
   }
-  if (!is.na(lambda_pack_AC_to_ambient)) {
-    m$parameters[["lambda_pack_AC_to_ambient"]] <- lambda_pack_AC_to_ambient
+  if (!is.na(lambda_module_AC_to_ambient)) {
+    m$parameters[["lambda_module_AC_to_ambient"]] <- lambda_module_AC_to_ambient
   }
   if (!is.na(fan_power)) {
     m$parameters[["lambda_cooling_power"]] <- fan_power
@@ -101,9 +101,9 @@ fit_model <- function(m = NULL,
 
   # read a full set of primary factors into shorthand vars
   packr <- m$parameters[["effective_pack_resistance"]]
-  lambda1 <- m$parameters[["lambda_cell_to_pack"]]
-  lambda2 <- m$parameters[["lambda_pack_to_ambient"]]
-  lambda3 <- m$parameters[["lambda_pack_AC_to_ambient"]]
+  pe <- m$parameters[["polarisation_energy"]]
+  lp <- m$parameters[["lambda_module_to_ambient"]]
+  la <- m$parameters[["lambda_module_AC_to_ambient"]]
   fanp <- m$parameters[["fan_power"]]
   COP <- m$parameters[["COP"]]
   arr <- m$parameters[["arrhenius_resistance"]]
@@ -133,33 +133,31 @@ fit_model <- function(m = NULL,
   # n.b. the box-constrained optimisation of L-BFGS-B throws an error if any
   # dimension of the box is zero, so we add an epsilon and hope for the best
   bestfit <- optim(
-    par = c(packr, lambda1, lambda2, lambda3, fanp, COP, arr),
+    par = c(packr, pe, lp, la, fanp, COP, arr),
     fn = fm,
-    lower = c(if (fixed_parameters[1]) packr else 100,
-              if (fixed_parameters[2]) lambda1 else 0,
-              if (fixed_parameters[3]) lambda2 else 0,
-              if (fixed_parameters[4]) lambda3 else 0,
+    lower = c(if (fixed_parameters[1]) packr else 40,
+              if (fixed_parameters[2]) pe else -4,
+              if (fixed_parameters[3]) lp else 0,
+              if (fixed_parameters[4]) la else 0,
               if (fixed_parameters[5]) fanp else 0,
               if (fixed_parameters[6]) COP else 0.1,
               if (fixed_parameters[7]) arr else -4000),
-    upper = c(if (fixed_parameters[1]) packr + 50 else 1200,
-              if (fixed_parameters[2]) lambda1 + 5 else 100,
-              if (fixed_parameters[3]) lambda2 + 0.5 else 15,
-              if (fixed_parameters[4]) lambda3 + 0.5 else 10,
-              if (fixed_parameters[5]) fanp + 200 else 1000,
+    upper = c(if (fixed_parameters[1]) packr + 100 else 600,
+              if (fixed_parameters[2]) pe + 1 else 0,
+              if (fixed_parameters[3]) lp + 0.5 else 15,
+              if (fixed_parameters[4]) la + 0.5 else 10,
+              if (fixed_parameters[5]) fanp + 200 else 600,
               if (fixed_parameters[6]) COP + 0.5 else 5,
               if (fixed_parameters[7]) arr - 200 else -400),
     control = list(maxit = iter_count,
-                   ndeps = c(50, 5, 0.5, 0.5, 200, 0.5, 200)),
-    #    parscale = c(1000, 10, 1, 1, 100, 1, 1000),
-    #
+                   ndeps = c(5, 0.2, 0.2, 0.1, 50, 0.5, 200)),
     method = "L-BFGS-B")
 
   # remove epsilons from the best-fit of fixed parameters
   best_packr = if (fixed_parameters[1]) packr else bestfit$par[1]
-  best_lambda1 = if (fixed_parameters[2]) lambda1 else bestfit$par[2]
-  best_lambda2 = if (fixed_parameters[3]) lambda2 else bestfit$par[3]
-  best_lambda3 = if (fixed_parameters[4]) lambda3 else bestfit$par[4]
+  best_pe = if (fixed_parameters[2]) pe else bestfit$par[2]
+  best_lp = if (fixed_parameters[3]) lp else bestfit$par[3]
+  best_la = if (fixed_parameters[4]) la else bestfit$par[4]
   best_fanp = if (fixed_parameters[5]) fanp else bestfit$par[5]
   best_COP = if (fixed_parameters[6]) COP else bestfit$par[6]
   best_arr = if (fixed_parameters[7]) arr else bestfit$par[7]
@@ -169,9 +167,9 @@ fit_model <- function(m = NULL,
     m <- predict_temp(
       m,
       effective_pack_resistance = best_packr,
-      lambda_cell_to_pack = best_lambda1,
-      lambda_pack_to_ambient = best_lambda2,
-      lambda_pack_AC_to_ambient = best_lambda3,
+      polarisation_energy = best_pe,
+      lambda_module_to_ambient = best_lp,
+      lambda_module_AC_to_ambient = best_la,
       fan_power = best_fanp,
       COP = best_COP,
       arrhenius_resistance = best_arr,
@@ -186,9 +184,9 @@ fit_model <- function(m = NULL,
   origmodel <- predict_temp(
     origmodel,
     effective_pack_resistance = best_packr,
-    lambda_cell_to_pack = best_lambda1,
-    lambda_pack_to_ambient = best_lambda2,
-    lambda_pack_AC_to_ambient = best_lambda3,
+    polarisation_energy = best_pe,
+    lambda_module_to_ambient = best_lp,
+    lambda_module_AC_to_ambient = best_la,
     fan_power = best_fanp,
     COP = best_COP,
     arrhenius_resistance = best_arr,

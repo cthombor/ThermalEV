@@ -1,7 +1,7 @@
 Package: ThermalEV
 Type: Package
 Title: Analyse LeafSpy Logs to Estimate Thermal Parameters of a Nissan Battery
-Version: 0.2.2
+Version: 0.2.3
 Authors@R: c(
     person(
       "Thomborson", "Clark",
@@ -9,13 +9,15 @@ Authors@R: c(
       role = c("aut", "cre")
     )
   )
-Description: Uses nlm() to find best-fit parameters for a simple thermal model
-  with three primary parameters.  The effective resistance of the pack is
-  the first parameter, in Ohms.  When multiplied by the square of the amperage, 
-  this gives the "Joule heating" in Watts.  The other parameters are time 
-  constants (in seconds) for the dissipation of the Joule heat, first to the
-  outside of the battery modules (where the thermosensors are mounted), and
-  then to the ambient air. We also provide some plotting routines.
+Description: Implements a thermal model
+  with seven primary parameters, providing routines for importing CSV files from LeafSpy,
+  and for parameter-fitting and plotting.  The effective resistance of the pack to charging
+  and discharging currents is the first parameter, in milliOhms.  When multiplied by the
+  square of the amperage, this resistance gives the "Joule heating" in kilowatts.  The second
+  parameter is a polarisation energy, in kJ/V, a cooling factor when the battery is being
+  charged and a heating factor when it is being discharged.  Two time constants (in hours)
+  model the pack's equilibration with the ambient temperature, with the second (shorter) time   constant being applied when the active cooling system is operating.  Two parameters allow a
+  very rough modelling of the active cooling system. The last parameter is theheat capacity    of the pack.  
 License: GPL-3
 Encoding: UTF-8
 LazyData: true

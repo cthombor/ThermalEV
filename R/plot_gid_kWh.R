@@ -1,7 +1,4 @@
-#' plot_gid_ahr: explore ahr v gid
-#'
-#' Plots reveal that gid is a biased estimate of Ah remaining, with
-#' a multiplicative factor of pack_volts explaining much of the variance.
+#' plot_gid_kWh: gids*.080, estimated kWh, temps, inefficiencies
 #'
 #' @param m a thmodel
 #' @param from_date starting date/time
@@ -13,9 +10,8 @@
 #' @export
 #'
 #' @examples
-#' plot_gid_ahr(eNV200ac24kWh_2025)
-#' plot_gid_ahr(eNV200ac24kWh_2025, min_soc = 70)
-plot_gid_ahr <- function(m,
+#' plot_gid_kWh(eNV200ac24kWh_2025)
+plot_gid_kWh <- function(m,
                      from_date = NULL,
                      to_date = NULL,
                      from_idx = NULL,
@@ -26,11 +22,10 @@ plot_gid_ahr <- function(m,
            gids,
            soc,
            soh,
-           a_hr,
+           obc_out_pwr,
            pack_volts,
            pack_amps,
            pack_avg_temp,
-           cp_m_v_diff,
            delta_t,
            waste_heatJ_kWh,
            AC_energy_kWh) |>
@@ -38,23 +33,22 @@ plot_gid_ahr <- function(m,
       gids_scaled = gids / (soh / 100),
       'Volts - 340' = pack_volts - 340,
       soc = soc / 1e4, # BMS scaling
-      a_hr = a_hr / 1e4, # BMS scaling
-      kWh_remaining = gids * 0.18, # assuming 1 gid = 180 Wh
+      charging_kW = obc_out_pwr / 1000,
+      kWh_remaining = gids * 0.080, # assuming 1 gid = 80 Wh
       grp_num = cumsum(is.na(delta_t)),
       adj_delta_t = ifelse(is.na(delta_t), 15, delta_t)
     ) |>
     mutate(
-      delta_kWh = - pack_amps * pack_volts * adj_delta_t / 3600,
-    ) |>
-    mutate(
-      delta_ah = delta_ah + ifelse(is.na(delta_t), ah_remaining, 0)
+      delta_kWh = - pack_amps * pack_volts * adj_delta_t / 3600 / 1000,
+      delta_kWh2 = charging_kW * adj_delta_t / 3600
     ) |>
     arrange(date_time)
 
   pd <- pd |>
     group_by(grp_num) |>
-    mutate(cumsum_delta_ah = cumsum(delta_ah),
-           # start these accumulators in each predicted session
+    mutate(cumsum_delta_kWh = cumsum(delta_kWh),
+           cumsum_delta_kWh2 = cumsum(delta_kWh2),
+           # restart these accumulators in each group
            waste_heatJ_kWh =  waste_heatJ_kWh - first(waste_heatJ_kWh),
            AC_energy_kWh = AC_energy_kWh - first(AC_energy_kWh)
            ) |>
@@ -80,23 +74,36 @@ plot_gid_ahr <- function(m,
 
   pd <- pd |>
     slice(from_idx:to_idx) |>
-    mutate('gids * 0.18' = ah_remaining,
-           'LeafSpy soc' = soc)
+    mutate('gids * 0.08' = gids * 0.08,
+           'LeafSpy %SOC * nom_kWh * %SOH' =
+             (soc / 100) * m$capacity * (soh / 100) )
 
   if (nrow(pd) == 0) {
     warning("No data to plot!")
   }
 
+  lcdk <- last(pd$cumsum_delta_kWh)
+  lcdk2 <- last(pd$cumsum_delta_kWh2)
+  lwhk <- last(pd$waste_heatJ_kWh)
+  lACe <- last(pd$AC_energy_kWh)
+  cat(round(lcdk, 3), "kWh to pack, ",
+      round(lwhk, 3), "kWh Joule heating, ",
+      round(lACe, 3), "kWh AC consumption\n")
+  cat("Alternative estimation of charging kWh:", round(lcdk2,3), "\n")
+  cat("kWh added: ", round((last(pd$gids) - first(pd$gids)) * 0.08, 2), "\n")
+  cat("Estimated kWh added: ", round(lcdk - lwhk - lACe, 3), "\n")
+  cat("Estimated efficiency: ", round((lcdk - lwhk - lACe) / lcdk, 3), "\n")
+
   pdts <- pd |>
     select(date_time,
-           cumsum_delta_ah,
-           'gids * 0.18',
+           cumsum_delta_kWh,
+           'gids * 0.08',
            'Volts - 340',
-           'LeafSpy soc',
+           'LeafSpy %SOC * nom_kWh * %SOH',
            pack_avg_temp,
-           cp_m_v_diff,
            waste_heatJ_kWh,
-           AC_energy_kWh
+           AC_energy_kWh,
+           charging_kW
            ) |>
     as.xts()
   plot(pdts,

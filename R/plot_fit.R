@@ -94,18 +94,21 @@ plot_fit <- function(m,
           m$name,
           ": r = ",
           format((m$parameters)[["effective_pack_resistance"]], digits = 3),
-          " mΩ, λ1 = ",
-          format((m$parameters)[["lambda_cell_to_pack"]], digits = 3),
-          " s, λ2 = ",
-          format((m$parameters)[["lambda_pack_to_ambient"]], digits = 3),
-          " h, λ3 = ",
-          format((m$parameters)[["lambda_pack_AC_to_ambient"]], digits = 3),
-          " h, fanp = ",
+          "\u2009mΩ, p = ", # thin space
+          format((m$parameters)[["polarisation_energy"]], digits = 3),
+          "\u2009kJ/V, λp = ",
+          format((m$parameters)[["lambda_module_to_ambient"]], digits = 3),
+          "\u2009h, λa = ",
+          format((m$parameters)[["lambda_module_AC_to_ambient"]], digits = 3),
+          "\u2009h, fanp = ",
           format((m$parameters)[["fan_power"]], digits = 3),
-          " W, COP = ",
+          "\u2009W, COP = ",
           format((m$parameters)[["COP"]], digits = 3),
           ", a = ",
-          format((m$parameters)[["arrhenius_resistance"]], digits = 3)
+          format((m$parameters)[["arrhenius_resistance"]], digits = 3),
+          ", c = ",
+          format((m$parameters)[["heat_capacity"]], digits = 3),
+          "\u2009kJ/K"
         )
       )
   }
