@@ -11,8 +11,17 @@ new_thmodel()
 thmodel, a named list
 }
 \description{
-new_thmodel.  A lean-and-mean constructor, defining only the names and
-classes of the required fields.
+I'm relying on Kubal (2022, https://doi.org/10.1016/j.jpowsour.2022.231864)
+for an estimation of the effective activation energy in the temperature
+dependence (as estimated by Arrhenius' equation) of the effective resistance
+of the NCM811 (or perhaps NCM632) cells in the Nissan packs under test.
+An activation energy in the range from -27 to -31 kJ/mol corresponds to a
+slope in the range [-3250, -3730] of the log-resistance of the pack (for
+purposes of a Joule-heating estimation) as a function of temperature.  I
+have validated -3500 as a plausible fit to the temperature-dependence of
+the (inaccurately-predicted) effective resistance of the pack, and I don't
+have anywhere near enough data to form a more accurate estimate of the
+arrhenius_resistance parameter in my model of the pack's thermal behaviour.
 }
 \examples{
 m <- new_thmodel()

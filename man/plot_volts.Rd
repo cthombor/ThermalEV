@@ -12,7 +12,7 @@ plot_volts(
   to_idx = NULL,
   min_sgids = NULL,
   max_sgids = NULL,
-  temp_colours = FALSE
+  scale_colours = 0
 )
 }
 \arguments{
@@ -30,7 +30,7 @@ plot_volts(
 
 \item{max_sgids}{low-pass filter on scaled gids (to examine non-linearity)}
 
-\item{temp_colours}{TRUE adds colours for temps, FALSE for pack_amps}
+\item{scale_colours}{colours show pack_temp (0), pack_amps (1), pack_kW (2)}
 }
 \value{
 an Environment

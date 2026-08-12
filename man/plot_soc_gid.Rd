@@ -20,7 +20,7 @@ plot_soc_gid(
 \arguments{
 \item{m}{a thmodel}
 
-\item{min_gids}{if !is.null, the (unscaled!) gids "in reserve" at 0% SOC}
+\item{min_gids}{if !is.null, the (unscaled!) gids "in reserve" at 0\% SOC}
 
 \item{suppress_outliers}{if TRUE, don't plot the reported outliers}
 
@@ -36,7 +36,7 @@ plot_soc_gid(
 
 \item{max_soc_filter}{low-pass filter on soc (to examine non-linearity)}
 
-\item{max_sgids}{if !is.null, gids at 100% SOC and 100% SOH, else estimated}
+\item{max_sgids}{if !is.null, gids at 100\% SOC and 100\% SOH, else estimated}
 }
 \value{
 an Environment

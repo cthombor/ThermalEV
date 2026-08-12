@@ -39,8 +39,8 @@ new_thmodel <- function() {
       # if logdata has any rows, then this must be a log from
       # LeafSpy as munged by munge_logfile, with additional columns
       # from thmodel.predict_temp() on the parameters
-      ocvdata = tibble()
-      # if ocvdata has any rows, then this must be an estimate of the OCV
+      ocv_tbl = tibble()
+      # if ocv_tbl has any rows, then this must be a tabular estimate of the OCV
       # at 25 °C, as a function of SOC.
     )
   m <- structure(m, class = "thmodel")

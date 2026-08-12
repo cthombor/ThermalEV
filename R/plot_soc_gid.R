@@ -1,8 +1,8 @@
 #' plot_soc_gid: plot a computed SOC and the reported SOC against gid
 #'
 #' @param m a thmodel
-#' @param max_sgids if !is.null, gids at 100% SOC and 100% SOH, else estimated
-#' @param min_gids if !is.null, the (unscaled!) gids "in reserve" at 0% SOC
+#' @param max_sgids if !is.null, gids at 100\% SOC and 100\% SOH, else estimated
+#' @param min_gids if !is.null, the (unscaled!) gids "in reserve" at 0\% SOC
 #' @param suppress_outliers if TRUE, don't plot the reported outliers
 #' @param from_date starting date/time for plotting & analysis
 #' @param to_date ending date/time
@@ -18,15 +18,15 @@
 #' plot_soc_gid(eNV200ac24kWh_2025)
 #' plot_soc_gid(eNV200ac24kWh_2025, max_soc_filter = 25)
 plot_soc_gid <- function(m,
-                     max_gids = NULL,
-                     min_gids = NULL,
-                     suppress_outliers = FALSE,
-                     from_date = NULL,
-                     to_date = NULL,
-                     from_idx = NULL,
-                     to_idx = NULL,
-                     min_soc_filter = NULL,
-                     max_soc_filter = NULL)
+                         max_gids = NULL,
+                         min_gids = NULL,
+                         suppress_outliers = FALSE,
+                         from_date = NULL,
+                         to_date = NULL,
+                         from_idx = NULL,
+                         to_idx = NULL,
+                         min_soc_filter = NULL,
+                         max_soc_filter = NULL)
 {
   # The LeafSpy-reported SOC drops from 100% to 0%, linearly in gids,
   # with 0% at min_gid.  At 100% SOC, the pack's usable capacity is
@@ -127,7 +127,7 @@ plot_soc_gid <- function(m,
   min_soh <- min(pd$soh, na.rm = TRUE)
   if (max_soh - min_soh > 5) {
     warning(paste0("SOH varies by more than 5 points, from ",
-            min_soh, "% to ", max_soh, "%"))
+                   min_soh, "% to ", max_soh, "%"))
   }
 
   if (is.null(max_gids)) { # regression
@@ -139,8 +139,8 @@ plot_soc_gid <- function(m,
       (median_soh / 100)
   } else { # compute from args
     # note that min_g is scaled, to maintain a reserve of constant size
-#   min_g <- min_gids / (median_soh / 100)
-#   max_g <- max_gids / (median_soh / 100)
+    #   min_g <- min_gids / (median_soh / 100)
+    #   max_g <- max_gids / (median_soh / 100)
     min_g <- min_gids
     max_sg <- max_sgids
     slope_s <- 100 / (max_sgids / (median_soh / 100) - min_g)

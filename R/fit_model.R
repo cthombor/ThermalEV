@@ -1,15 +1,14 @@
-#' fit_model: uses nlm() to find a best-fit, with MSE criterion
+#' fit_model: uses optim() to find a best-fit, with MSE criterion
 #'
 #' @param m a thmodel
-#'
 #' @param effective_pack_resistance in mOhms
 #' @param polarisation_energy in kJ/V
 #' @param lambda_module_to_ambient in hours
 #' @param lambda_module_to_ambient in hours
 #' @param fan_power in W
 #' @param COP coefficient of heatpump performance, dimensionless
-#' @param arrhenius_resistance in K, a primary parameter
-#' @param heat_capacity in J/K, a secondary parameter
+#' @param arrhenius_resistance in K
+#' @param heat_capacity in kJ/K
 #' @param iter_count controls convergence on predicted temps
 #' @param min_segment_length shorter sequences of samples are ignored
 #' @param fixed_parameters length-8 Boolean vector, reduces dimension of opt
@@ -19,30 +18,31 @@
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
 #' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
 #'
-#' @returns a list, retval from nlm() describing its best-fit
+#' @returns modified thmodel, with best-fit predictions and parameters
 #' @export
 #'
 #' @examples
-#' m <- fit_model(print.level = 2)
-fit_model <- function(m = NULL,
-                      effective_pack_resistance = NA,
-                      polarisation_energy = NA,
-                      lambda_module_to_ambient = NA,
-                      lambda_module_AC_to_ambient = NA,
-                      fan_power = NA,
-                      COP = NA,
-                      arrhenius_resistance = NA,
-                      heat_capacity = NA,
-                      iter_count = 4,
-                      min_segment_length = 20,
-                      fixed_parameters = c(T, F, F, F, F, F, F, F),
-                      trace = 1,
-                      from_date = NULL,
-                      to_date = NULL,
-                      from_idx = NULL,
-                      to_idx = NULL) {
+#' m <- fit_model(thmodels = list("eNV200ac50kWh"))
+fit_model <- function(
+    m = NULL,
+    effective_pack_resistance = NA,
+    polarisation_energy = NA,
+    lambda_module_to_ambient = NA,
+    lambda_module_AC_to_ambient = NA,
+    fan_power = NA,
+    COP = NA,
+    arrhenius_resistance = NA,
+    heat_capacity = NA,
+    iter_count = 4,
+    min_segment_length = 20,
+    fixed_parameters = c(T, F, F, F, F, F, F, F),
+    trace = 1,
+    from_date = NULL,
+    to_date = NULL,
+    from_idx = NULL,
+    to_idx = NULL) {
 
-#' fm: interface to predict_temp(), for use by nlm()
+#' fm: local fcn, interface to predict_temp(), for use by optim()
 #'
 #' Side effect: updates thmodel `m` in the calling environment
 #'
@@ -196,9 +196,8 @@ fit_model <- function(m = NULL,
     heat_capacity = best_hc,
     iter_count = iter_count,
     min_segment_length = min_segment_length,
-    trace = trace
+    trace = min(1, trace)
   )
-  cat("MSE of fit over the full dataset:", MSE_of_fit(origmodel), "\n")
 
   return(origmodel)
 }

@@ -1,7 +1,5 @@
 #' Plot pack temp, predicted pack temp, ambient temp, kW (smoothed)
 #'
-#' #todo: dispatch through generic plot()
-#'
 #' @param m a thmodel, with predictions
 #' @param from_date starting date/time
 #' @param to_date ending date/time

@@ -7,9 +7,9 @@
 predict_temp(
   tmodel = NULL,
   effective_pack_resistance = NA,
-  lambda_cell_to_pack = NA,
-  lambda_pack_to_ambient = NA,
-  lambda_pack_AC_to_ambient = NA,
+  polarisation_energy = NA,
+  lambda_module_to_ambient = NA,
+  lambda_module_AC_to_ambient = NA,
   fan_power = NA,
   COP = NA,
   arrhenius_resistance = NA,
@@ -30,11 +30,11 @@ predict_temp(
 
 \item{effective_pack_resistance}{in mOhms at 298.15K, a primary parameter}
 
-\item{lambda_cell_to_pack}{in seconds, a primary parameter}
+\item{polarisation_energy}{in kJ/V, a primary parameter}
 
-\item{lambda_pack_to_ambient}{in hours, a primary parameter}
+\item{lambda_module_to_ambient}{in hours, a primary parameter}
 
-\item{lambda_pack_AC_to_ambient}{in hours, a primary parameter}
+\item{lambda_module_AC_to_ambient}{in hours, a primary parameter}
 
 \item{fan_power}{in Watts, a primary parameter}
 
@@ -42,7 +42,7 @@ predict_temp(
 
 \item{arrhenius_resistance}{in K, a primary parameter}
 
-\item{heat_capacity}{in J/K, a secondary parameter}
+\item{heat_capacity}{in kJ/K, a secondary parameter}
 
 \item{iter_count}{controls convergence on predicted temps}
 
@@ -80,20 +80,40 @@ values of the modelling parameters used for its temperature predictions.
 \details{
 Notes on heat capacity:
 
-The 96 cells in my aftermarket 50kWh pack weigh 2.13 kg apiece, so there's a
-total of roughly 200kg of water (at 4.13 J/gK) in the electrolyte.  There'll
-be some additional heat content in the 100kg of non-cell contents in the
-pack. Polyethylene is 2.0 J/gK, steel is 0.5 J/gK, everything else is less.
-As a round number, the heat capacity of the pack is thus 1.0e6 J/K.  This is a
-secondary parameter in our modelling because the Joule heating (in K) of a
-pack is the square of its amperage, multiplied by its effective resistance
-and divided by its heat capacity (in J/K).  The best-fit COP for the
-heatpump is within the normal range for a well-engineered heatpump,
-suggesting that the heat content of the pack is plausibly estimated
-by our 1e6 J/K default.  However our mOhms value is linearly dependent
-on the value assigned to the heat capacity of the pack, so it is a biased
-estimate until such time (if ever) we have some way to estimate the pack's
-effective heat capacity from empirical data.
+The Joule heating (in K) of a pack is the square of its amperage, multiplied
+by its effective resistance and divided by its heat capacity (in J/K).
+Estimating an effective resistance for a pack, from observed gains in pack
+temperature while it is being fastcharged, is possible in my model's
+simulation only after fixing an estimate of heat capacity.
+
+The 96 cells in my aftermarket 50kWh pack weigh 2.13 kg apiece.  If the
+solvent in their electrolyte is DME (1,2-dimethoxyethane), it has a heat
+capacity of 192 J/mol.K, i.e. about 2.1 J/gK.  If the solvent is ethylene
+carbonate, then it would have a lower heat capacity: 134 J/mol.K = 1.6 J/gK.
+The electrolyte might be lithium hexafluorophosphate (152 J/mol.K, 151 g/mol,
+1.0 J/gK).  Its presence increases the density of the electrolyte, but would
+decrease the per-gram heat capacity of a 1:1 mix of DME and EC to 1.4 J/gK,
+if it is in a 1M solution. The casings of the prismatic cells may be
+polyethylene (at 2.0 J/gK). The module casings seem to be steel (at 0.5
+J/gK).  The shell of the pack is aluminium (at 0.9 J/gK). As a round number,
+the total weight of the pack is 220 kg.  Its heat capacity might thus be
+300 to 400 kJ/K.  An alternative estimate from the literature: a 60 Ah
+NMC811 pouch cell was estimated as having a specific heat capacity of
+1.1 kJ/kg.K (see
+https://www.sciencedirect.com/science/article/pii/S1452398125002512),
+suggesting that the heat capacity of the VIVNE 50kWh pack might be as low as
+250 kJ/K.
+
+My intent is to run a simulation using a roughly-estimated heat capacity,
+then to validate its predictions of Joule heating by comparing the energy
+gained by the pack (as estimated by the BMS) to the kWh billed by a
+fastcharging provider less the (estimated) Joule heating and any
+BMS-estimated consumption of energy by the active cooling system.  If the
+predictions of fastcharging inefficiency are low, then I will raise the value
+of the heat_capacity parameter and re-run the simulation. The heat_capacity
+parameter is thus essentially a secondary parameter in my simulation, and is
+the primary factor in the sequential experimentation which will shift it to a
+more accurate value.
 }
 \examples{
 m <- predict_temp() # uses data-raw/log26Jan26.csv

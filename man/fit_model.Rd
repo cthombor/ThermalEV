@@ -2,21 +2,21 @@
 % Please edit documentation in R/fit_model.R
 \name{fit_model}
 \alias{fit_model}
-\title{fit_model: uses nlm() to find a best-fit, with MSE criterion}
+\title{fit_model: uses optim() to find a best-fit, with MSE criterion}
 \usage{
 fit_model(
   m = NULL,
   effective_pack_resistance = NA,
-  lambda_cell_to_pack = NA,
-  lambda_pack_to_ambient = NA,
-  lambda_pack_AC_to_ambient = NA,
+  polarisation_energy = NA,
+  lambda_module_to_ambient = NA,
+  lambda_module_AC_to_ambient = NA,
   fan_power = NA,
   COP = NA,
   arrhenius_resistance = NA,
   heat_capacity = NA,
   iter_count = 4,
   min_segment_length = 20,
-  fixed_parameters = c(F, F, F, F, F, F, F),
+  fixed_parameters = c(T, F, F, F, F, F, F, F),
   trace = 1,
   from_date = NULL,
   to_date = NULL,
@@ -29,25 +29,23 @@ fit_model(
 
 \item{effective_pack_resistance}{in mOhms}
 
-\item{lambda_cell_to_pack}{in seconds}
+\item{polarisation_energy}{in kJ/V}
 
-\item{lambda_pack_to_ambient}{in hours}
-
-\item{lambda_pack_AC_to_ambient}{in hours}
+\item{lambda_module_to_ambient}{in hours}
 
 \item{fan_power}{in W}
 
 \item{COP}{coefficient of heatpump performance, dimensionless}
 
-\item{arrhenius_resistance}{in K, a primary parameter}
+\item{arrhenius_resistance}{in K}
 
-\item{heat_capacity}{in J/K, a secondary parameter}
+\item{heat_capacity}{in kJ/K}
 
 \item{iter_count}{controls convergence on predicted temps}
 
 \item{min_segment_length}{shorter sequences of samples are ignored}
 
-\item{fixed_parameters}{length-7 Boolean vector, reduces dimension of opt}
+\item{fixed_parameters}{length-8 Boolean vector, reduces dimension of opt}
 
 \item{trace}{0 for silent, 1 for minimal, 2 for verbose}
 
@@ -62,18 +60,15 @@ fit_model(
 \item{x}{parameter list}
 }
 \value{
-a list, retval from nlm() describing its best-fit
-
-MSE of the fit
+modified thmodel, with best-fit predictions and parameters
 }
 \description{
-fit_model: uses nlm() to find a best-fit, with MSE criterion
+fit_model: uses optim() to find a best-fit, with MSE criterion
 }
 \examples{
-m <- fit_model(print.level = 2)
-fm: interface to predict_temp(), for use by nlm()
+m <- fit_model(thmodels = list("eNV200ac50kWh"))
+fm: local fcn, interface to predict_temp(), for use by optim()
 
 Side effect: updates thmodel `m` in the calling environment
 
-fm(c(500, 120, 8, 2, 300, 3))
 }

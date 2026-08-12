@@ -445,22 +445,20 @@ predict_temp <- function(tmodel = NULL,
     if (trace > 1) {
       cat("Iteration",
           iternum,
-          ": Prediction error in the full dataset: (",
+          ": MSE = ",
+          round(MSE_of_fit(m), 4),
+          " error range = (",
           round(logtibble$err_pred[minpe], 2),
           ",",
           round(logtibble$err_pred[maxpe], 2),
-          "), MSE = ",
-          round(MSE_of_fit(m), 4),
-          "\n"
+          ")\n"
       )
       if (iternum == iter_count) {
         cat("    at (",
             format_ISO8601(logtibble$date_time[minpe]),
             ",",
             format_ISO8601(logtibble$date_time[maxpe]),
-             "), MSE = ",
-            round(MSE_of_fit(m), 4),
-            "\n"
+            ")\n"
         )
       }
     }
