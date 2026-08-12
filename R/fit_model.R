@@ -12,7 +12,7 @@
 #' @param heat_capacity in J/K, a secondary parameter
 #' @param iter_count controls convergence on predicted temps
 #' @param min_segment_length shorter sequences of samples are ignored
-#' @param fixed_parameters length-7 Boolean vector, reduces dimension of opt
+#' @param fixed_parameters length-8 Boolean vector, reduces dimension of opt
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #' @param from_date starting date/time
 #' @param to_date ending date/time
@@ -35,7 +35,7 @@ fit_model <- function(m = NULL,
                       heat_capacity = NA,
                       iter_count = 4,
                       min_segment_length = 20,
-                      fixed_parameters = c(F, F, F, F, F, F, F),
+                      fixed_parameters = c(T, F, F, F, F, F, F, F),
                       trace = 1,
                       from_date = NULL,
                       to_date = NULL,
@@ -48,12 +48,7 @@ fit_model <- function(m = NULL,
 #'
 #' @param x parameter list
 #'
-#' @returns MSE of the fit
-#' @export
-#'
-#' @examples
-#' fm(c(500, 120, 8, 2, 300, 3))
-  fm <- function(x = c(packr, pe, lp, la, fanp, COP, arr)) {
+  fm <- function(x = c(packr, pe, lp, la, fanp, COP, arr, hc)) {
     m <- predict_temp(
       m,
       effective_pack_resistance = x[1],
@@ -62,7 +57,8 @@ fit_model <- function(m = NULL,
       lambda_module_AC_to_ambient = x[4],
       fan_power = x[5],
       COP = x[6],
-      arr = x[7],
+      arrhenius_resistance = x[7],
+      heat_capacity = x[8],
       trace = trace
     )
     return(MSE_of_fit(m))
@@ -70,7 +66,7 @@ fit_model <- function(m = NULL,
 
   if (is.null(m)) m <- munge_logfile()  # use our default logfile
 
-  stopifnot(length(m$parameters == 0) || length(m$parameters == 7))
+  stopifnot((length(m$parameters) == 0) || (length(m$parameters) == 9))
   if (length(m$parameters) == 0) {
     m <- default_params(m)
   }
@@ -98,6 +94,9 @@ fit_model <- function(m = NULL,
   if (!is.na(arrhenius_resistance)) {
     m$parameters[["arrhenius_resistance"]] <- arrhenius_resistance
   }
+  if (!is.na(heat_capacity)) {
+    m$parameters[["heat_capacity"]] <- heat_capacity
+  }
 
   # read a full set of primary factors into shorthand vars
   packr <- m$parameters[["effective_pack_resistance"]]
@@ -107,6 +106,7 @@ fit_model <- function(m = NULL,
   fanp <- m$parameters[["fan_power"]]
   COP <- m$parameters[["COP"]]
   arr <- m$parameters[["arrhenius_resistance"]]
+  hc <- m$parameters[["heat_capacity"]]
 
   # all logs "should" be sorted on date-time... but just in case...
   plotdata <- m$logdata |> arrange(date_time)
@@ -133,7 +133,7 @@ fit_model <- function(m = NULL,
   # n.b. the box-constrained optimisation of L-BFGS-B throws an error if any
   # dimension of the box is zero, so we add an epsilon and hope for the best
   bestfit <- optim(
-    par = c(packr, pe, lp, la, fanp, COP, arr),
+    par = c(packr, pe, lp, la, fanp, COP, arr, hc),
     fn = fm,
     lower = c(if (fixed_parameters[1]) packr else 40,
               if (fixed_parameters[2]) pe else -4,
@@ -141,16 +141,18 @@ fit_model <- function(m = NULL,
               if (fixed_parameters[4]) la else 0,
               if (fixed_parameters[5]) fanp else 0,
               if (fixed_parameters[6]) COP else 0.1,
-              if (fixed_parameters[7]) arr else -4000),
+              if (fixed_parameters[7]) arr else -4000,
+              if (fixed_parameters[8]) hc else 200),
     upper = c(if (fixed_parameters[1]) packr + 100 else 600,
               if (fixed_parameters[2]) pe + 1 else 0,
               if (fixed_parameters[3]) lp + 0.5 else 15,
               if (fixed_parameters[4]) la + 0.5 else 10,
               if (fixed_parameters[5]) fanp + 200 else 600,
-              if (fixed_parameters[6]) COP + 0.5 else 5,
-              if (fixed_parameters[7]) arr - 200 else -400),
+              if (fixed_parameters[6]) COP + 0.5 else 6,
+              if (fixed_parameters[7]) arr - 200 else -400,
+              if (fixed_parameters[8]) hc + 100 else 1000),
     control = list(maxit = iter_count,
-                   ndeps = c(5, 0.2, 0.2, 0.1, 50, 0.5, 200)),
+                   ndeps = c(5, 0.2, 0.2, 0.1, 50, 0.5, 200, 10)),
     method = "L-BFGS-B")
 
   # remove epsilons from the best-fit of fixed parameters
@@ -161,6 +163,7 @@ fit_model <- function(m = NULL,
   best_fanp = if (fixed_parameters[5]) fanp else bestfit$par[5]
   best_COP = if (fixed_parameters[6]) COP else bestfit$par[6]
   best_arr = if (fixed_parameters[7]) arr else bestfit$par[7]
+  best_hc = if (fixed_parameters[8]) hc else bestfit$par[8]
 
   # evaluate predict_temp() on the best_fit parameters
   if ((to_idx - from_idx + 1) < length(origmodel$logdata$err_pred)) {
@@ -173,7 +176,7 @@ fit_model <- function(m = NULL,
       fan_power = best_fanp,
       COP = best_COP,
       arrhenius_resistance = best_arr,
-      heat_capacity = heat_capacity,
+      heat_capacity = best_hc,
       iter_count = iter_count,
       min_segment_length = min_segment_length,
       trace = trace
@@ -190,7 +193,7 @@ fit_model <- function(m = NULL,
     fan_power = best_fanp,
     COP = best_COP,
     arrhenius_resistance = best_arr,
-    heat_capacity = heat_capacity,
+    heat_capacity = best_hc,
     iter_count = iter_count,
     min_segment_length = min_segment_length,
     trace = trace
