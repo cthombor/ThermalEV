@@ -42,7 +42,7 @@
 default_params <- function(m) {
   if (length(m$parameters) == 0) {
     m$parameters <- list(effective_pack_resistance =
-                           ifelse(m$capacity == 24, 300, 150),
+                           ifelse(m$capacity == 24, 140, 67),
                          polarisation_energy =
                            ifelse(m$capacity == 24, -1, -2),
                          lambda_module_to_ambient =
@@ -54,7 +54,7 @@ default_params <- function(m) {
                          COP = ifelse(m$model == "e-NV200", 3.0, 0),
                          arrhenius_resistance = -3500,
                          heat_capacity = 300,
-                         OCV_tbl = tibble(
+                         ocv_tbl = tibble(
                            SOC = c(
                              0.000,
                              0.005,
