@@ -1,4 +1,4 @@
-# new_ocv_model: S3 class constructor
+#' new_ocv_model: S3 class constructor
 #'
 #' @param name # user-friendly name, used for titles of plots
 #' @param thmodels # provenance (a list of thmodels)
@@ -19,7 +19,7 @@ new_ocv_model <-
       capacity = NULL, # nominal capacity, in kWh
       created.time = now(), # an untidy name, as in xts
       modified.last.time = now(),
-      parameters = list(), # effective_pack_resistance, arrhenius_resistance
+      parameters = list(), # resistance parameters e.g. packr85
       ocv_tbl = tibble(),
       # if ocv_tbl has any rows, then this must be a tabular estimate of the OCV
       # at 25 °C, as a function of SOC.
@@ -40,7 +40,9 @@ new_ocv_model <-
     om$capacity <- m$capacity
     om$parameters <- list(
       effective_pack_resistance = m$parameters[["effective_pack_resistance"]],
-      arrhenius_resistance = m$parameters[["arrhenius_resistance"]]
+      packr85 = m$parameters[["packr85"]],
+      arrhenius_resistance = m$parameters[["arrhenius_resistance"]],
+      heat_capacity = m$parameters[["heat_capacity"]]
       )
     om$ocv_tbl <- m$parameters$ocv_tbl
     om$logdata <- m$logdata |>
@@ -56,13 +58,13 @@ new_ocv_model <-
       mld <- m$logdata |>
         select(soc, pack_volts, pack_amps, pack_avg_temp, hx, date_time) |>
         mutate(soc = soc / 1e6) # 0.0 to 1.0 scale
-      om$logdata <- om$logdata |> rbind(mld) # copies everything!
-      # could be hack-optimised e.g. with pre-allocated lists, but that's more
+      om$logdata <- om$logdata |> rbind(mld) # quadratic runtime, ouch
+      # Could be hack-optimised e.g. with pre-allocated lists, but that's more
       # trouble than it's worth.  Welcome to the second hell of the R inferno!
     }
   }
 
-  om <- predict_ocv(om) # initial voltage predictions
+  om <- predict_volts(om) # initial voltage predictions
 
   return(om)
 }

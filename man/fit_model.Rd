@@ -6,17 +6,18 @@
 \usage{
 fit_model(
   m = NULL,
-  effective_pack_resistance = NA,
+  arrhenius_resistance = NA,
+  heat_capacity = NA,
   polarisation_energy = NA,
   lambda_module_to_ambient = NA,
   lambda_module_AC_to_ambient = NA,
   fan_power = NA,
   COP = NA,
-  arrhenius_resistance = NA,
-  heat_capacity = NA,
+  effective_pack_resistance = NA,
+  packr85 = NA,
   iter_count = 4,
   min_segment_length = 20,
-  fixed_parameters = c(T, F, F, F, F, F, F, F),
+  fixed_parameters = c(F, F, F, F, F, F, F, T, T),
   trace = 1,
   from_date = NULL,
   to_date = NULL,
@@ -27,7 +28,9 @@ fit_model(
 \arguments{
 \item{m}{a thmodel}
 
-\item{effective_pack_resistance}{in mOhms}
+\item{arrhenius_resistance}{in K}
+
+\item{heat_capacity}{in kJ/K}
 
 \item{polarisation_energy}{in kJ/V}
 
@@ -37,15 +40,15 @@ fit_model(
 
 \item{COP}{coefficient of heatpump performance, dimensionless}
 
-\item{arrhenius_resistance}{in K}
+\item{effective_pack_resistance}{in mOhms}
 
-\item{heat_capacity}{in kJ/K}
+\item{packr85}{in mOhms}
 
 \item{iter_count}{controls convergence on predicted temps}
 
 \item{min_segment_length}{shorter sequences of samples are ignored}
 
-\item{fixed_parameters}{length-8 Boolean vector, reduces dimension of opt}
+\item{fixed_parameters}{length-9 Boolean vector, reduces dimension of opt}
 
 \item{trace}{0 for silent, 1 for minimal, 2 for verbose}
 

@@ -14,7 +14,6 @@
 #'   * {pack_t3_c}{uniformly NA in our version of LeafSpy}
 #'   * {pack_t4_c}{temperature at surface of module 4, at 0.1 K precision}
 #'   * {odo_km}{odometer reading, if car in Drive mode, otherwise NA}
-#'
 #' @source {thmodel} R package.
 "eNV200noac50kWh"
 
@@ -22,13 +21,11 @@
 #' as defined in thmodel.R.  The logdata is a tibble with more than 3600 rows
 #' and more than 150 columns.
 #' @format A thmodel object.
-#'
 #' @source {thmodel} R package.
 "eNV200ac24kWh_2025"
 
 #' eNV200ac50kWh: a thmodel object, with provenance, of logs from the
 #' fully-functional 50kWh upgrade.  The fields are as defined in thmodel.R.
 #' @format A thmodel object.
-#'
 #' @source {thmodel} R package.
 "eNV200ac50kWh"

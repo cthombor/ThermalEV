@@ -21,7 +21,7 @@ plot_fit(m, from_date = NULL, to_date = NULL, from_idx = NULL, to_idx = NULL)
 an Environment
 }
 \description{
-#todo: dispatch through generic plot()
+Plot pack temp, predicted pack temp, ambient temp, kW (smoothed)
 }
 \examples{
 plot_fit(eNV200noac50kWh, from_idx = 1, to_idx = 10)

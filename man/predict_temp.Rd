@@ -2,11 +2,12 @@
 % Please edit documentation in R/predict_temp.R
 \name{predict_temp}
 \alias{predict_temp}
-\title{Uses a 7-parameter thermal model to predict temperatures in a LeafSpy log}
+\title{Evaluates a 9-parameter thermal model to predict temperatures in a LeafSpy log}
 \usage{
 predict_temp(
   tmodel = NULL,
   effective_pack_resistance = NA,
+  packr85 = NA,
   polarisation_energy = NA,
   lambda_module_to_ambient = NA,
   lambda_module_AC_to_ambient = NA,
@@ -14,6 +15,7 @@ predict_temp(
   COP = NA,
   arrhenius_resistance = NA,
   heat_capacity = NA,
+  ocv_tbl = NULL,
   iter_count = 4,
   min_segment_length = 20,
   trace = 2,
@@ -28,23 +30,27 @@ predict_temp(
 \arguments{
 \item{tmodel}{a thmodel, optional}
 
-\item{effective_pack_resistance}{in mOhms at 298.15K, a primary parameter}
+\item{effective_pack_resistance}{in mOhms at 298.15K for SOC <= 70 percent}
 
-\item{polarisation_energy}{in kJ/V, a primary parameter}
+\item{packr85}{in mOhms, effective pack resistance at SOC >= 85 percent}
 
-\item{lambda_module_to_ambient}{in hours, a primary parameter}
+\item{polarisation_energy}{in kJ/V, a reversible (entropic) heat}
 
-\item{lambda_module_AC_to_ambient}{in hours, a primary parameter}
+\item{lambda_module_to_ambient}{in hours}
 
-\item{fan_power}{in Watts, a primary parameter}
+\item{lambda_module_AC_to_ambient}{in hours}
 
-\item{COP}{dimensionless, a primary parameter}
+\item{fan_power}{in Watts}
 
-\item{arrhenius_resistance}{in K, a primary parameter}
+\item{COP}{dimensionless}
 
-\item{heat_capacity}{in kJ/K, a secondary parameter}
+\item{arrhenius_resistance}{in K, temperature dependence of effective packr}
 
-\item{iter_count}{controls convergence on predicted temps}
+\item{heat_capacity}{in kJ/K}
+
+\item{ocv_tbl}{maps SOC onto OCV, either a 2-column tibble or an om_model}
+
+\item{iter_count}{may be increased for a more accurate prediction}
 
 \item{min_segment_length}{shorter sequences of samples are ignored}
 
@@ -71,51 +77,14 @@ directory, in which case this logfile is munged -- to mitigate the privacy
 risk of publishing a VIN, and to revise column names so that they're tidy.
 This routine also does some "cleaning" of obviously-wonky data e.g. of a
 pack at 0 Volts or at 80 degrees (in a field that is normally in Centrigade
-units).  The output of this routine is a thmodel object containing the
-munged and cleaned data from LeafSpy augmented with additional columns for
-the predictions of pack temperature (and for convenience when plotting).
-The thmodel has metadata describing its provenance and the (updated)
-values of the modelling parameters used for its temperature predictions.
+units).
 }
 \details{
-Notes on heat capacity:
+The output of this routine is a thmodel object containing the munged and
+cleaned data from LeafSpy augmented with additional columns for the
+predictions of pack temperature (and for convenience when plotting). This
+thmodel records a timestamp of its modification, and the values of the
+modelling parameters used for its updated temperature predictions.
 
-The Joule heating (in K) of a pack is the square of its amperage, multiplied
-by its effective resistance and divided by its heat capacity (in J/K).
-Estimating an effective resistance for a pack, from observed gains in pack
-temperature while it is being fastcharged, is possible in my model's
-simulation only after fixing an estimate of heat capacity.
-
-The 96 cells in my aftermarket 50kWh pack weigh 2.13 kg apiece.  If the
-solvent in their electrolyte is DME (1,2-dimethoxyethane), it has a heat
-capacity of 192 J/mol.K, i.e. about 2.1 J/gK.  If the solvent is ethylene
-carbonate, then it would have a lower heat capacity: 134 J/mol.K = 1.6 J/gK.
-The electrolyte might be lithium hexafluorophosphate (152 J/mol.K, 151 g/mol,
-1.0 J/gK).  Its presence increases the density of the electrolyte, but would
-decrease the per-gram heat capacity of a 1:1 mix of DME and EC to 1.4 J/gK,
-if it is in a 1M solution. The casings of the prismatic cells may be
-polyethylene (at 2.0 J/gK). The module casings seem to be steel (at 0.5
-J/gK).  The shell of the pack is aluminium (at 0.9 J/gK). As a round number,
-the total weight of the pack is 220 kg.  Its heat capacity might thus be
-300 to 400 kJ/K.  An alternative estimate from the literature: a 60 Ah
-NMC811 pouch cell was estimated as having a specific heat capacity of
-1.1 kJ/kg.K (see
-https://www.sciencedirect.com/science/article/pii/S1452398125002512),
-suggesting that the heat capacity of the VIVNE 50kWh pack might be as low as
-250 kJ/K.
-
-My intent is to run a simulation using a roughly-estimated heat capacity,
-then to validate its predictions of Joule heating by comparing the energy
-gained by the pack (as estimated by the BMS) to the kWh billed by a
-fastcharging provider less the (estimated) Joule heating and any
-BMS-estimated consumption of energy by the active cooling system.  If the
-predictions of fastcharging inefficiency are low, then I will raise the value
-of the heat_capacity parameter and re-run the simulation. The heat_capacity
-parameter is thus essentially a secondary parameter in my simulation, and is
-the primary factor in the sequential experimentation which will shift it to a
-more accurate value.
-}
-\examples{
-m <- predict_temp() # uses data-raw/log26Jan26.csv
-m <- m |> predict_temp(effective_pack_resistance = 0.5)
+Initial estimates of parameters are hardcoded in default_params().
 }

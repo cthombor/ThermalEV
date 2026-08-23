@@ -92,7 +92,9 @@ plot_fit <- function(m,
           m$name,
           ": r = ",
           format((m$parameters)[["effective_pack_resistance"]], digits = 3),
-          "\u2009mΩ, p = ", # thin space
+          "\u2009mΩ, r85 = ", # n.b. unicode is a thin space
+          format((m$parameters)[["packr85"]], digits = 3),
+          "\u2009mΩ, p = ",
           format((m$parameters)[["polarisation_energy"]], digits = 3),
           "\u2009kJ/V, λp = ",
           format((m$parameters)[["lambda_module_to_ambient"]], digits = 3),

@@ -2,18 +2,21 @@
 % Please edit documentation in R/new_ocv_model.R
 \name{new_ocv_model}
 \alias{new_ocv_model}
-\title{A lean-and-mean constructor, defining only the names and classes of the
-required fields.}
+\title{new_ocv_model: S3 class constructor}
 \usage{
-new_ocv_model()
+new_ocv_model(name = "", thmodels = list())
+}
+\arguments{
+\item{name}{# user-friendly name, used for titles of plots}
+
+\item{thmodels}{# provenance (a list of thmodels)}
 }
 \value{
 ocv_model, a named list
 }
 \description{
-A lean-and-mean constructor, defining only the names and classes of the
-required fields.
+new_ocv_model: S3 class constructor
 }
 \examples{
-o <- new_ocv_model()
+om <- new_ocv_model("eNV50kWh", list(eNV200ac50kWh, eNV200noac50kWh))
 }

@@ -1,63 +1,32 @@
-#' Uses a 7-parameter thermal model to predict temperatures in a LeafSpy log
+#' Evaluates a thermal model to predict temperatures in a LeafSpy log
 #'
 #' A LeafSpy logfile may be specified to this function by filename and
 #' directory, in which case this logfile is munged -- to mitigate the privacy
 #' risk of publishing a VIN, and to revise column names so that they're tidy.
 #' This routine also does some "cleaning" of obviously-wonky data e.g. of a
 #' pack at 0 Volts or at 80 degrees (in a field that is normally in Centrigade
-#' units).  The output of this routine is a thmodel object containing the
-#' munged and cleaned data from LeafSpy augmented with additional columns for
-#' the predictions of pack temperature (and for convenience when plotting).
-#' The thmodel has metadata describing its provenance and the (updated)
-#' values of the modelling parameters used for its temperature predictions.
+#' units).
 #'
-#' Notes on heat capacity:
+#' The output of this routine is a thmodel object containing the munged and
+#' cleaned data from LeafSpy augmented with additional columns for the
+#' predictions of pack temperature (and for convenience when plotting). This
+#' thmodel records a timestamp of its modification, and the values of the
+#' modelling parameters used for its updated temperature predictions.
 #'
-#' The Joule heating (in K) of a pack is the square of its amperage, multiplied
-#' by its effective resistance and divided by its heat capacity (in J/K).
-#' Estimating an effective resistance for a pack, from observed gains in pack
-#' temperature while it is being fastcharged, is possible in my model's
-#' simulation only after fixing an estimate of heat capacity.
-#'
-#' The 96 cells in my aftermarket 50kWh pack weigh 2.13 kg apiece.  If the
-#' solvent in their electrolyte is DME (1,2-dimethoxyethane), it has a heat
-#' capacity of 192 J/mol.K, i.e. about 2.1 J/gK.  If the solvent is ethylene
-#' carbonate, then it would have a lower heat capacity: 134 J/mol.K = 1.6 J/gK.
-#' The electrolyte might be lithium hexafluorophosphate (152 J/mol.K, 151 g/mol,
-#' 1.0 J/gK).  Its presence increases the density of the electrolyte, but would
-#' decrease the per-gram heat capacity of a 1:1 mix of DME and EC to 1.4 J/gK,
-#' if it is in a 1M solution. The casings of the prismatic cells may be
-#' polyethylene (at 2.0 J/gK). The module casings seem to be steel (at 0.5
-#' J/gK).  The shell of the pack is aluminium (at 0.9 J/gK). As a round number,
-#' the total weight of the pack is 220 kg.  Its heat capacity might thus be
-#' 300 to 400 kJ/K.  An alternative estimate from the literature: a 60 Ah
-#' NMC811 pouch cell was estimated as having a specific heat capacity of
-#' 1.1 kJ/kg.K (see
-#' https://www.sciencedirect.com/science/article/pii/S1452398125002512),
-#' suggesting that the heat capacity of the VIVNE 50kWh pack might be as low as
-#' 250 kJ/K.
-#'
-#' My intent is to run a simulation using a roughly-estimated heat capacity,
-#' then to validate its predictions of Joule heating by comparing the energy
-#' gained by the pack (as estimated by the BMS) to the kWh billed by a
-#' fastcharging provider less the (estimated) Joule heating and any
-#' BMS-estimated consumption of energy by the active cooling system.  If the
-#' predictions of fastcharging inefficiency are low, then I will raise the value
-#' of the heat_capacity parameter and re-run the simulation. The heat_capacity
-#' parameter is thus essentially a secondary parameter in my simulation, and is
-#' the primary factor in the sequential experimentation which will shift it to a
-#' more accurate value.
+#' Initial estimates of parameters are hardcoded in default_params().
 #'
 #' @param tmodel a thmodel, optional
-#' @param effective_pack_resistance in mOhms at 298.15K, a primary parameter
-#' @param polarisation_energy in kJ/V, a primary parameter
-#' @param lambda_module_to_ambient in hours, a primary parameter
-#' @param lambda_module_AC_to_ambient in hours, a primary parameter
-#' @param fan_power in Watts, a primary parameter
-#' @param COP dimensionless, a primary parameter
-#' @param arrhenius_resistance in K, a primary parameter
-#' @param heat_capacity in kJ/K, a secondary parameter
-#' @param iter_count controls convergence on predicted temps
+#' @param effective_pack_resistance in mOhms at 298.15K for SOC <= 70 percent
+#' @param packr85 in mOhms, effective pack resistance at SOC >= 85 percent
+#' @param polarisation_energy in kJ/V, a reversible (entropic) heat
+#' @param lambda_module_to_ambient in hours
+#' @param lambda_module_AC_to_ambient in hours
+#' @param fan_power in Watts
+#' @param COP dimensionless
+#' @param arrhenius_resistance in K, temperature dependence of effective packr
+#' @param heat_capacity in kJ/K
+#' @param ocv_tbl maps SOC onto OCV, either a 2-column tibble or an om_model
+#' @param iter_count may be increased for a more accurate prediction
 #' @param min_segment_length shorter sequences of samples are ignored
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #' @param logfilnm name of a csv logfile to be read, if is.null(tmodel)
@@ -71,11 +40,12 @@
 #' @export
 #'
 #' @examples
-#' m <- predict_temp() # uses data-raw/log26Jan26.csv
-#' m <- m |> predict_temp(effective_pack_resistance = 0.5)
+#' m <- predict_temp() # default dataset is data-raw/log26Jan26.csv
+#' m <- m |> predict_temp(effective_pack_resistance = 67)
 
 predict_temp <- function(tmodel = NULL,
                          effective_pack_resistance = NA,
+                         packr85 = NA,
                          polarisation_energy = NA,
                          lambda_module_to_ambient = NA,
                          lambda_module_AC_to_ambient = NA,
@@ -83,6 +53,7 @@ predict_temp <- function(tmodel = NULL,
                          COP = NA,
                          arrhenius_resistance = NA,
                          heat_capacity = NA,
+                         ocv_tbl = NULL,
                          iter_count = 4,
                          min_segment_length = 20,
                          trace = 2,
@@ -93,6 +64,32 @@ predict_temp <- function(tmodel = NULL,
                          from_idx = NULL,
                          to_idx = NULL) {
 
+  #' Notes on heat capacity:
+  #'
+  #' The Joule heating (in K) of a pack is the square of its amperage, multiplied
+  #' by its effective resistance and divided by its heat capacity (in J/K).
+  #' An accurate estimation of the effective resistance for a pack, based on its
+  #' observed thermal behaviour, is possible only with an accurate estimation
+  #' of its heat capacity.
+  #'
+  #' I recommend the thermal modelling of predict_temp(), with some judicious use
+  #' of fit_model(), be used to refine an initial estimate of heat capacity and
+  #' all other non-resistive parameters in my model, based on a fixed estimate of
+  #' the pack's effective resistance. With these refined estimates, the pack
+  #' voltage modelling of predict_volts() method can be used to refine the
+  #' resistance model.  Sourcing om_eNV24kWh.R and om_eNV50kWh.R will produce two
+  #' ocv_models (one for each size of pack), as required for the use of est_ocv()
+  #' and the optimisation routine fit_r_to_ocv().  These methods return a refined
+  #' ocv_model, notably including a revised ocv_table that maps the pack's SOC (as
+  #' reported by LeafSpy) onto the pack's (estimated) open circuit voltage (OCV).
+  #' The fit_r_to_ocv() method searches for better-fitting resistances to the
+  #' observed changes in pack voltage as a function of pack amperage, pack
+  #' temperature, SOC, and Hx. The fit_r_to_ocv() method also adjusts the
+  #' heat_capacity parameter so that the total Joule heating over the dataset
+  #' remains constant -- because (except for the reversible entropic heating and
+  #' the rather slow cooling processes) the change in pack temperature is
+  #' proportional to the rate of Joule heating divided by its heat_capacity.
+
   if (!nzchar(logfilnm) && is.null(tmodel)) {
     stop("Aborting. Please specify the name of a LeafSpy logfile.")
   }
@@ -100,18 +97,45 @@ predict_temp <- function(tmodel = NULL,
     m <- tmodel
     if (is.null(m) || m$name == "") {
       m <- munge_logfile(logfilnm = logfilnm, logfildir = logfildir)
+      if (logfilnm == "log26Jan2026.csv") {
+        m$model <- "e-NV200" # required for default_params(m)
+        m$capacity <- 50
+      }
     }
-  } # endif (!nzchar(logfile))
+  }
 
   if (length(m$parameters) == 0) {
     m <- default_params(m)
   }
   logtibble <- m$logdata
 
-  # param values specified in the method call have precedence. Side effect:
-  # if m$parameters is malformed, throw a "subscript out of bounds" error
+  # param values specified in the method call have precedence.
+  if (!is.null(ocv_tbl)) {
+    if (class(ocv_tbl) == "ocv_model") {
+      om <- ocv_tbl
+      # om's parameters will be "pasted into" the thmodel if their values were not
+      # specified in the call to predict_temp()
+      if (is.na(effective_pack_resistance)) {
+        effective_pack_resistance <- om$parameters[["effective_pack_resistance"]]
+      }
+      if (is.na(packr85)) {
+        packr85 <- om$parameters[["packr85"]]
+      }
+      if (is.na(heat_capacity)) {
+        heat_capacity <- om$parameters[["heat_capacity"]]
+      }
+      ocv_tbl <- om$ocv_tbl  # extract the ocv_tbl from this ocv_model
+    }
+    stopifnot(dim(ocv_tbl)[2] == 2) # sanity checks
+    stopifnot(min(ocv_tbl[1]) >= 0.0)
+    stopifnot(max(ocv_tbl[1]) <= 1.0)
+    m$parameters[["ocv_tbl"]] <- ocv_tbl # update the thmodel's params
+  }
   if (!is.na(effective_pack_resistance)) {
     m$parameters[["effective_pack_resistance"]] <- effective_pack_resistance
+  }
+  if (!is.na(packr85)) {
+    m$parameters[["packr85"]] <- packr85
   }
   if (!is.na(polarisation_energy)) {
     m$parameters[["polarisation_energy"]] <- polarisation_energy
@@ -137,6 +161,7 @@ predict_temp <- function(tmodel = NULL,
 
   # read a full set of params
   effective_pack_resistance <- m$parameters[["effective_pack_resistance"]]
+  packr85 <- m$parameters[["packr85"]]
   polarisation_energy <- m$parameters[["polarisation_energy"]]
   lambda_module_to_ambient <- m$parameters[["lambda_module_to_ambient"]]
   lambda_module_AC_to_ambient <- m$parameters[["lambda_module_AC_to_ambient"]]
@@ -146,17 +171,21 @@ predict_temp <- function(tmodel = NULL,
   heat_capacity <- m$parameters[["heat_capacity"]]
 
   if (trace > 0) {
-    cat(paste0("predict_temp: r = ", round(effective_pack_resistance, 5),
-             ", pe = ", round(polarisation_energy, 5),
-             ", λp = ", round(lambda_module_to_ambient, 5),
-             ", λa = ", round(lambda_module_AC_to_ambient, 5),
-             ", fanp = ", round(fan_power, 5),
-             ", COP = ", round(COP, 5),
-             ", a = ", round(arrhenius_resistance, 5),
-             ", c = ", round(heat_capacity, 5),
-             "\n"))
+    cat(paste0("predict_temp:",
+               " a = ", round(arrhenius_resistance, 5),
+               ", c = ", round(heat_capacity, 5),
+               ", pe = ", round(polarisation_energy, 5),
+               ", λp = ", round(lambda_module_to_ambient, 5),
+               ", λa = ", round(lambda_module_AC_to_ambient, 5),
+               ", fanp = ", round(fan_power, 5),
+               ", COP = ", round(COP, 5),
+               ", r = ", round(effective_pack_resistance, 5),
+               ", r85 = ", round(packr85, 5),
+               "; "))
   }
-  # n.b. additional secondary parameters may be stored in m$parameters
+  if (trace > 1) {
+    print(ocv_tbl)
+  }
 
   if (COP < 0.0) {
     COP <- 0.0
@@ -307,21 +336,36 @@ predict_temp <- function(tmodel = NULL,
       logtibble$pred_pack_avg_temp[wstart[i]] <-
         logtibble$pack_avg_temp[wstart[i]]
     }
+
+    sloper <- (packr85 - effective_pack_resistance) / 15
+    f_soc_to_v <- approxfun(m$parameters[["ocv_tbl"]], method = "linear")
     logtibble <- logtibble |>
       group_by(segnum) |>
       mutate(
-        eff_packr = effective_pack_resistance *
-          exp(arrhenius_resistance *
-                (1 / 298.15 - 1 / (pred_pack_avg_temp + 273.15))) /
+        ssoc = soc / 1e6, # scale to (0.0, 1.0)
+        # pack is modelled as having a constant resistance for soc in (0%, 70%);
+        # then linearly increasing to packr85 at soc = 85%; then constant at
+        # packr85 for soc >= 85%
+        eff_packr =
+          ifelse(
+            ssoc <= 0.70,
+            effective_pack_resistance,
+            ifelse(
+              ssoc >= 0.85,
+              packr85,
+              effective_pack_resistance + sloper * (ssoc - 0.70)
+            )
+          ) * exp(arrhenius_resistance *
+                    (1 / 298.15 - 1 / (pred_pack_avg_temp + 273.15))) /
           (pred_hx / 100),
+        pred_pack_volts = f_soc_to_v(ssoc) - pack_amps * eff_packr / 1000,
         pred_Joule_heating =
-          (pack_amps * pack_amps + 0.5 * slope_amps * slope_amps
-          ) *
+          (pack_amps * pack_amps + 0.5 * slope_amps * slope_amps) *
           eff_packr / 1000 * delta_t, # in Ws.  Note: r is in mOhms.
         delta_v = pack_volts -
           dplyr::lag(pack_volts, default = first(pack_volts)),
         pred_polarisation_heating =
-          delta_v * polarisation_energy * delta_t * 1000, # in Ws. Reversible.
+          delta_v * polarisation_energy * 1000, # in Ws. Reversible.
         cooling_power = 50 * est_pwr_a_c_50w - fan_power,
         cooling_power = if_else(cooling_power < 0, 0, cooling_power),
         heat_pump_cooling = if_else(
@@ -462,6 +506,10 @@ predict_temp <- function(tmodel = NULL,
         )
       }
     }
+  }
+
+  if (trace > 0) {
+    cat(" MSE =", round(MSE_of_fit(m), 2), "\n")
   }
 
   return(m)
