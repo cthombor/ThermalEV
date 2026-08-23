@@ -11,5 +11,6 @@
 /data-raw/202*
 /data/e*.rda
 /data/Leaf*.rda
+/data/om*.rda
 /images
 .positai
