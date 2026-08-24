@@ -134,18 +134,18 @@ default_params <- function(m,
   m$parameters <- list(arrhenius_resistance = -3500,
                        heat_capacity = 250,
                        polarisation_energy =
-                         ifelse(m$capacity == 24, 12, 24),
+                         ifelse(m$capacity == 24, 7, 15),
                        lambda_module_to_ambient =
-                         ifelse(m$capacity == 24, 8, 8),
+                         ifelse(m$capacity == 24, 7.5, 7.5),
                        lambda_module_AC_to_ambient =
-                         ifelse(m$model == "e-NV200", 8, 8),
+                         ifelse(m$model == "e-NV200", 1.1, 1.1),
                        fan_power =
                          ifelse(m$model == "e-NV200", 300, 0),
                        COP = ifelse(m$model == "e-NV200", 1.5, 0),
                        effective_pack_resistance =
-                         ifelse(m$capacity == 24, 140, 60),
+                         ifelse(m$capacity == 24, 180, 60),
                        packr85 =
-                         ifelse(m$capacity == 24, 140, 60),
+                         ifelse(m$capacity == 24, 180, 60),
                        ocv_tbl = ot
   )
   m$modified.last.time <- now()
