@@ -2,7 +2,7 @@
 % Please edit documentation in R/predict_temp.R
 \name{predict_temp}
 \alias{predict_temp}
-\title{Evaluates a 9-parameter thermal model to predict temperatures in a LeafSpy log}
+\title{Evaluates a thermal model to predict temperatures in a LeafSpy log}
 \usage{
 predict_temp(
   tmodel = NULL,
@@ -87,4 +87,8 @@ thmodel records a timestamp of its modification, and the values of the
 modelling parameters used for its updated temperature predictions.
 
 Initial estimates of parameters are hardcoded in default_params().
+}
+\examples{
+m <- predict_temp()
+m <- predict_temp(m, effective_pack_resistance = 67)
 }

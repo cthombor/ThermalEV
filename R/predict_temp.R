@@ -40,8 +40,8 @@
 #' @export
 #'
 #' @examples
-#' m <- predict_temp() # default dataset is data-raw/log26Jan26.csv
-#' m <- m |> predict_temp(effective_pack_resistance = 67)
+#' m <- predict_temp()
+#' m <- predict_temp(m, effective_pack_resistance = 67)
 
 predict_temp <- function(tmodel = NULL,
                          effective_pack_resistance = NA,
@@ -64,31 +64,31 @@ predict_temp <- function(tmodel = NULL,
                          from_idx = NULL,
                          to_idx = NULL) {
 
-  #' Notes on heat capacity:
-  #'
-  #' The Joule heating (in K) of a pack is the square of its amperage, multiplied
-  #' by its effective resistance and divided by its heat capacity (in J/K).
-  #' An accurate estimation of the effective resistance for a pack, based on its
-  #' observed thermal behaviour, is possible only with an accurate estimation
-  #' of its heat capacity.
-  #'
-  #' I recommend the thermal modelling of predict_temp(), with some judicious use
-  #' of fit_model(), be used to refine an initial estimate of heat capacity and
-  #' all other non-resistive parameters in my model, based on a fixed estimate of
-  #' the pack's effective resistance. With these refined estimates, the pack
-  #' voltage modelling of predict_volts() method can be used to refine the
-  #' resistance model.  Sourcing om_eNV24kWh.R and om_eNV50kWh.R will produce two
-  #' ocv_models (one for each size of pack), as required for the use of est_ocv()
-  #' and the optimisation routine fit_r_to_ocv().  These methods return a refined
-  #' ocv_model, notably including a revised ocv_table that maps the pack's SOC (as
-  #' reported by LeafSpy) onto the pack's (estimated) open circuit voltage (OCV).
-  #' The fit_r_to_ocv() method searches for better-fitting resistances to the
-  #' observed changes in pack voltage as a function of pack amperage, pack
-  #' temperature, SOC, and Hx. The fit_r_to_ocv() method also adjusts the
-  #' heat_capacity parameter so that the total Joule heating over the dataset
-  #' remains constant -- because (except for the reversible entropic heating and
-  #' the rather slow cooling processes) the change in pack temperature is
-  #' proportional to the rate of Joule heating divided by its heat_capacity.
+  # Notes on heat capacity:
+  #
+  # The Joule heating (in K) of a pack is the square of its amperage, multiplied
+  # by its effective resistance and divided by its heat capacity (in J/K).
+  # An accurate estimation of the effective resistance for a pack, based on its
+  # observed thermal behaviour, is possible only with an accurate estimation
+  # of its heat capacity.
+  #
+  # I recommend the thermal modelling of predict_temp(), with some judicious use
+  # of fit_model(), be used to refine an initial estimate of heat capacity and
+  # all other non-resistive parameters in my model, based on a fixed estimate of
+  # the pack's effective resistance. With these refined estimates, the pack
+  # voltage modelling of predict_volts() method can be used to refine the
+  # resistance model.  Sourcing om_eNV24kWh.R and om_eNV50kWh.R will produce two
+  # ocv_models (one for each size of pack), as required for the use of est_ocv()
+  # and the optimisation routine fit_r_to_ocv().  These methods return a refined
+  # ocv_model, notably including a revised ocv_table that maps the pack's SOC (as
+  # reported by LeafSpy) onto the pack's (estimated) open circuit voltage (OCV).
+  # The fit_r_to_ocv() method searches for better-fitting resistances to the
+  # observed changes in pack voltage as a function of pack amperage, pack
+  # temperature, SOC, and Hx. The fit_r_to_ocv() method also adjusts the
+  # heat_capacity parameter so that the total Joule heating over the dataset
+  # remains constant -- because (except for the reversible entropic heating and
+  # the rather slow cooling processes) the change in pack temperature is
+  # proportional to the rate of Joule heating divided by its heat_capacity.
 
   if (!nzchar(logfilnm) && is.null(tmodel)) {
     stop("Aborting. Please specify the name of a LeafSpy logfile.")
@@ -113,10 +113,11 @@ predict_temp <- function(tmodel = NULL,
   if (!is.null(ocv_tbl)) {
     if (class(ocv_tbl) == "ocv_model") {
       om <- ocv_tbl
-      # om's parameters will be "pasted into" the thmodel if their values were not
-      # specified in the call to predict_temp()
+      # om's parameters will be "pasted into" the thmodel if their values were
+      # not specified in the call to predict_temp()
       if (is.na(effective_pack_resistance)) {
-        effective_pack_resistance <- om$parameters[["effective_pack_resistance"]]
+        effective_pack_resistance <-
+          om$parameters[["effective_pack_resistance"]]
       }
       if (is.na(packr85)) {
         packr85 <- om$parameters[["packr85"]]
@@ -169,6 +170,7 @@ predict_temp <- function(tmodel = NULL,
   COP <- m$parameters[["COP"]]
   arrhenius_resistance <- m$parameters[["arrhenius_resistance"]]
   heat_capacity <- m$parameters[["heat_capacity"]]
+  ocv_tbl <- m$parameters[["ocv_tbl"]]
 
   if (trace > 0) {
     cat(paste0("predict_temp:",
@@ -184,15 +186,13 @@ predict_temp <- function(tmodel = NULL,
                "; "))
   }
   if (trace > 1) {
-    print(ocv_tbl)
+    print(ocv_tbl) # n.b. this is irrelevant to thermal predictions
   }
 
   if (COP < 0.0) {
     COP <- 0.0
     warning("The minimum COP of a fit is 0.0\n")
     # avoids a possible runaway negative COP in optim() if fan_power is low.
-    # (It's the effective pack resistance which causes most of the heat gain
-    # during a fastcharge.)
   }
 
   if (!"delta_t" %in% names(logtibble)) {
@@ -201,11 +201,12 @@ predict_temp <- function(tmodel = NULL,
     #compute delta_t for runs of near-consecutive samples
     logtibble <- logtibble |>
       mutate(delta_t = date_time - dplyr::lag(date_time))
-    # n.b. dplyr's lag/lead is sort-of-intuitive if you imagine lag() as an
-    # element-wise operation which retrieves the "previous" value in a vector,
-    # rather than imagining that a lagged timeseries has been shifted
-    # "backwards" (toward lower-indexed/earlier values).  It's a hazardous
-    # semantic conflict with xts::lag() and stats::lag()!
+    # n.b. dplyr's redefinition of lag/lead is vaguely intuitive, if you imagine
+    # lag() as an element-wise operation which retrieves the "previous" value in
+    # a vector, rather than taking a vector-centric view -- in which a vector is
+    # shifted "backwards" (toward lower-indexed/earlier values) by a lag.  This
+    # is a direct -- and hazardous -- semantic conflict with xts::lag() and
+    # stats::lag().
 
     # we make a rude estimate of the sampling interval over the whole file
     # in order to count missing samples (with reasonable accuracy)
@@ -299,6 +300,10 @@ predict_temp <- function(tmodel = NULL,
   wend <- dplyr::lead(w) - 1
   wend[nsegments] <- length(logtibble$delta_t)
   wexclude <- (wend - wstart) < min_segment_length
+
+  if (sum(!wexclude) == 0) {
+    warning("Insufficient segment lengths, no predictions will be made!")
+  }
 
   segnumv = rep(0, length(logtibble$delta_t))
   for (i in seq(nsegments)[which(!wexclude)]) {

@@ -8,6 +8,7 @@
 #'
 #' @examples
 #' om <- new_ocv_model("eNV50kWh", list(eNV200ac50kWh, eNV200noac50kWh))
+#' om <- new_ocv_model("eNV50kWh.alt", list(eNV50kWh))
 new_ocv_model <-
   function(
     name = "",
@@ -49,7 +50,7 @@ new_ocv_model <-
       select(soc, pack_volts, pack_amps, pack_avg_temp, hx, date_time) |>
       mutate(soc = soc / 1e6) # 0.0 to 1.0 scale
 
-    for (i in 1 : length(thmodels)) {
+    for (i in 2 : length(thmodels)) {
       m <- thmodels[[i]]
       if ((om$model != m$model) ||
           (om$capacity != m$capacity)) {

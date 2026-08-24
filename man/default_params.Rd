@@ -4,10 +4,12 @@
 \alias{default_params}
 \title{default_params: sets thmodel params to default values}
 \usage{
-default_params(m)
+default_params(m, ot = NULL)
 }
 \arguments{
 \item{m}{a thmodel}
+
+\item{ot}{an ocv_tbl, estimated from voltage behaviour (est_ocv())}
 }
 \value{
 a thmodel with all required params set
@@ -69,12 +71,16 @@ polyethylene (at 2.0 J/gK). The module casings seem to be steel (at 0.5
 J/gK).  The shell of the pack is aluminium (at 0.9 J/gK). As a round number,
 the total weight of the pack is 220 kg.  Its heat capacity might thus be 300
 to 400 kJ/K.  An alternative estimate from the literature: a 60 Ah NMC811
-pouch cell was estimated as having a specific heat capacity of 1.1 kJ/kg.K
+pouch cell was estimated as having a specific heat capacity of 1.1 J/gK
 (see https://www.sciencedirect.com/science/article/pii/S1452398125002512),
-suggesting that the heat capacity of the VIVNE 50kWh pack might be as low as
+suggesting that the heat capacity of the VIVNE 50kWh pack might be
 250 kJ/K.  Our initial estimate of heat_capacity is thus 300 kJ/K for the
 50kWh pack.  The 24kWh pack has approximately the same weight, so we use the
-same initial estimate of 300 kJ/K for its heat_capacity.
+same initial estimate of 300 kJ/K for its heat_capacity.  Our temperature
+and voltage models are imprecise, and the pack resistance parameters are
+almost entirely collinear with the pack's heat capacity (with the exception
+of the reversible heat of polarisation); but our best-fits suggest a
+heat capacity of approximately 250 kJ/K.
 }
 \examples{
 default_params(new_thmodel())

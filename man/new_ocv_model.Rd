@@ -19,4 +19,5 @@ new_ocv_model: S3 class constructor
 }
 \examples{
 om <- new_ocv_model("eNV50kWh", list(eNV200ac50kWh, eNV200noac50kWh))
+om <- new_ocv_model("eNV50kWh.alt", list(eNV50kWh))
 }

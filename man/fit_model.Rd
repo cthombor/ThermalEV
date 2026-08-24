@@ -52,7 +52,7 @@ fit_model(
 
 \item{trace}{0 for silent, 1 for minimal, 2 for verbose}
 
-\item{from_date}{starting date/time}
+\item{from_date}{starting date/time (for a time-restricted optimisation)}
 
 \item{to_date}{ending date/time}
 

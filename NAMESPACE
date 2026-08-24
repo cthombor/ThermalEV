@@ -2,6 +2,7 @@
 
 export(MSE_of_fit)
 export(MSE_of_ocv_fit)
+export(combine_thmodels)
 export(default_params)
 export(est_ocv)
 export(fit_model)

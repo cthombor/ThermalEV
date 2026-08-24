@@ -12,7 +12,7 @@ plot_volts_pred(
   to_idx = NULL,
   wonky_threshold = 50,
   scatter = FALSE,
-  scale_colours = 0
+  scale_colours = 1
 )
 }
 \arguments{
