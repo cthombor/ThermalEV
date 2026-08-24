@@ -1,5 +1,11 @@
 #' est_ocv: refine an ocv_tbl, from errors in an om_model's voltage prediction
 #'
+#' Usage notes.  You might want to interpolate a smaller table e.g.
+#'  ot <- est_ocv(om_eNV50kWh)
+#'  otf <- approxfun(x = ot$SOC, y = ot$OCV, method = "linear", rule = 2)
+#'  oti <- tibble(SOC=c(0:20)/rep(20,21)) |> mutate(OCV = otf(SOC)))
+#'  e50 <- predict_temp(eNV200ac50kWh, ocv_tbl = oti)
+#'
 #' @param om an ocv_model
 #' @param wonky_threshold in Volts, outlier criterion (default 50)
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
