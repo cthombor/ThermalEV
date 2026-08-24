@@ -38,7 +38,7 @@ predict_volts <- function(om = NULL,
                "; "))
   }
 
-  f_soc_to_v <- approxfun(om$ocv_tbl, method = "linear")
+  f_soc_to_v <- approxfun(om$ocv_tbl, method = "linear", rule = 2)
   sloper <- (packr85 - effective_pack_resistance) / 0.15
 
   om$logdata <- om$logdata |>

@@ -338,7 +338,9 @@ predict_temp <- function(tmodel = NULL,
     }
 
     sloper <- (packr85 - effective_pack_resistance) / 15
-    f_soc_to_v <- approxfun(m$parameters[["ocv_tbl"]], method = "linear")
+    f_soc_to_v <- approxfun(m$parameters[["ocv_tbl"]],
+                            method = "linear",
+                            rule = 2)
     logtibble <- logtibble |>
       group_by(segnum) |>
       mutate(

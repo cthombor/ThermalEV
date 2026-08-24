@@ -21,7 +21,7 @@ plot_volts_pred <- function(m,
                             to_idx = NULL,
                             wonky_threshold = 50,
                             scatter = FALSE,
-                            scale_colours = 0)
+                            scale_colours = 1)
 {
   pd <- select(m$logdata,
                date_time,

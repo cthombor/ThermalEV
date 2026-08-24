@@ -55,85 +55,98 @@
 #' J/gK).  The shell of the pack is aluminium (at 0.9 J/gK). As a round number,
 #' the total weight of the pack is 220 kg.  Its heat capacity might thus be 300
 #' to 400 kJ/K.  An alternative estimate from the literature: a 60 Ah NMC811
-#' pouch cell was estimated as having a specific heat capacity of 1.1 kJ/kg.K
+#' pouch cell was estimated as having a specific heat capacity of 1.1 J/gK
 #' (see https://www.sciencedirect.com/science/article/pii/S1452398125002512),
-#' suggesting that the heat capacity of the VIVNE 50kWh pack might be as low as
+#' suggesting that the heat capacity of the VIVNE 50kWh pack might be
 #' 250 kJ/K.  Our initial estimate of heat_capacity is thus 300 kJ/K for the
 #' 50kWh pack.  The 24kWh pack has approximately the same weight, so we use the
-#' same initial estimate of 300 kJ/K for its heat_capacity.
+#' same initial estimate of 300 kJ/K for its heat_capacity.  Our temperature
+#' and voltage models are imprecise, and the pack resistance parameters are
+#' almost entirely collinear with the pack's heat capacity (with the exception
+#' of the reversible heat of polarisation); but our best-fits suggest a
+#' heat capacity of approximately 250 kJ/K.
 #'
 #' @param m a thmodel
+#' @param ot an ocv_tbl, estimated from voltage behaviour (est_ocv())
 #'
 #' @returns a thmodel with all required params set
 #' @export
 #'
 #' @examples default_params(new_thmodel())
-default_params <- function(m) {
+default_params <- function(m,
+                           ot = NULL) {
   stopifnot(!is.na(m$capacity))
   stopifnot(!is.null(m$model))
+  stopifnot(!is.null(ot) ||
+              !(is_tibble(ot) && names(ot) == c("SOC", "OCV")))
+
+  if (is.null(ot)) {
+    ot = tibble(
+      SOC = c( # from cell spec sheet. N.b. soc may vary from Nissan's def
+        0.000,
+        0.005,
+        0.012,
+        0.060,
+        0.117,
+        0.177,
+        0.237,
+        0.294,
+        0.354,
+        0.409,
+        0.471,
+        0.534,
+        0.589,
+        0.648,
+        0.708,
+        0.766,
+        0.823,
+        0.883,
+        0.943,
+        0.983,
+        1.000
+      ),
+      OCV = c(
+        295.2,
+        306.0,
+        315.4,
+        327.5,
+        334.2,
+        338.9,
+        342.0,
+        344.6,
+        347.1,
+        349.6,
+        352.0,
+        357.2,
+        361.5,
+        367.4,
+        372.5,
+        378.1,
+        384.1,
+        390.9,
+        395.9,
+        399.7,
+        403.2
+      )
+    )
+  }
+
   m$parameters <- list(arrhenius_resistance = -3500,
-                       heat_capacity = 300,
+                       heat_capacity = 250,
                        polarisation_energy =
-                         ifelse(m$capacity == 24, 1, 2),
+                         ifelse(m$capacity == 24, 12, 24),
                        lambda_module_to_ambient =
-                         ifelse(m$capacity == 24, 10, 6),
+                         ifelse(m$capacity == 24, 8, 8),
                        lambda_module_AC_to_ambient =
-                         ifelse(m$model == "e-NV200", 1.33, 10),
+                         ifelse(m$model == "e-NV200", 8, 8),
                        fan_power =
                          ifelse(m$model == "e-NV200", 300, 0),
-                       COP = ifelse(m$model == "e-NV200", 3.0, 0),
+                       COP = ifelse(m$model == "e-NV200", 1.5, 0),
                        effective_pack_resistance =
-                         ifelse(m$capacity == 24, 140, 67),
+                         ifelse(m$capacity == 24, 140, 60),
                        packr85 =
-                         ifelse(m$capacity == 24, 140, 67),
-                       ocv_tbl = tibble(
-                         SOC = c(
-                           0.000,
-                           0.005,
-                           0.012,
-                           0.060,
-                           0.117,
-                           0.177,
-                           0.237,
-                           0.294,
-                           0.354,
-                           0.409,
-                           0.471,
-                           0.534,
-                           0.589,
-                           0.648,
-                           0.708,
-                           0.766,
-                           0.823,
-                           0.883,
-                           0.943,
-                           0.983,
-                           1.000
-                         ),
-                         OCV = c(
-                           295.2,
-                           306.0,
-                           315.4,
-                           327.5,
-                           334.2,
-                           338.9,
-                           342.0,
-                           344.6,
-                           347.1,
-                           349.6,
-                           352.0,
-                           357.2,
-                           361.5,
-                           367.4,
-                           372.5,
-                           378.1,
-                           384.1,
-                           390.9,
-                           395.9,
-                           399.7,
-                           403.2
-                         )
-                       )
+                         ifelse(m$capacity == 24, 140, 60),
+                       ocv_tbl = ot
   )
   m$modified.last.time <- now()
   return(m)
