@@ -3,8 +3,8 @@
 \docType{data}
 \name{eNV200ac50kWh}
 \alias{eNV200ac50kWh}
-\title{eNV200ac50kWh: a thmodel object, with provenance, of logs from the
-fully-functional 50kWh upgrade.  The fields are as defined in thmodel.R.}
+\title{eNV200ac50kWh: a thmodel object containing logs from the fully-functional
+50kWh upgrade of my eNV200.}
 \format{
 A thmodel object.
 }
@@ -15,7 +15,7 @@ A thmodel object.
 eNV200ac50kWh
 }
 \description{
-eNV200ac50kWh: a thmodel object, with provenance, of logs from the
-fully-functional 50kWh upgrade.  The fields are as defined in thmodel.R.
+eNV200ac50kWh: a thmodel object containing logs from the fully-functional
+50kWh upgrade of my eNV200.
 }
 \keyword{datasets}

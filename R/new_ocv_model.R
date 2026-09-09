@@ -47,21 +47,23 @@ new_ocv_model <-
       )
     om$ocv_tbl <- m$parameters$ocv_tbl
     om$logdata <- m$logdata |>
-      select(soc, pack_volts, pack_amps, pack_avg_temp, hx, date_time) |>
+      select(soc, pack_volts, pack_amps, pack_avg_temp, hx, soh, date_time) |>
       mutate(soc = soc / 1e6) # 0.0 to 1.0 scale
 
-    for (i in 2 : length(thmodels)) {
+    if (length(thmodels) > 1) {
+      for (i in 2 : length(thmodels)) {
       m <- thmodels[[i]]
       if ((om$model != m$model) ||
           (om$capacity != m$capacity)) {
         warning("Incompatible data")
       }
       mld <- m$logdata |>
-        select(soc, pack_volts, pack_amps, pack_avg_temp, hx, date_time) |>
+        select(soc, pack_volts, pack_amps, pack_avg_temp, hx, soh, date_time) |>
         mutate(soc = soc / 1e6) # 0.0 to 1.0 scale
       om$logdata <- om$logdata |> rbind(mld) # quadratic runtime, ouch
       # Could be hack-optimised e.g. with pre-allocated lists, but that's more
       # trouble than it's worth.  Welcome to the second hell of the R inferno!
+    }
     }
   }
 

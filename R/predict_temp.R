@@ -195,9 +195,6 @@ predict_temp <- function(tmodel = NULL,
     # avoids a possible runaway negative COP in optim() if fan_power is low.
   }
 
-  if (!"delta_t" %in% names(logtibble)) {
-    # a minor optimisation: we avoid recomputing these columns
-
     #compute delta_t for runs of near-consecutive samples
     logtibble <- logtibble |>
       mutate(delta_t = date_time - dplyr::lag(date_time))
@@ -234,23 +231,28 @@ predict_temp <- function(tmodel = NULL,
     logtibble <- logtibble |>
       mutate(
         wonky_temps = !is.na(dplyr::lead(delta_t)) &
-          (abs((pack_avg_temp - dplyr::lead(pack_avg_temp))) > 1),
+          (abs((
+            pack_avg_temp - dplyr::lead(pack_avg_temp)
+          )) > 1),
         delta_t = ifelse(wonky_temps, NA, delta_t)
-        )
+      )
     wwonky <- which(logtibble$wonky_temps)
     if (length(wwonky) > 0) {
-      warning(paste("Omitted implausible temperature reading(s) at",
-                      paste(format_ISO8601(logtibble$date_time[wwonky]),
-                            collapse = " "),
-                      collapse = " "))
+      warning(paste(
+        "Implausible temperature reading(s) at",
+        paste(format_ISO8601(logtibble$date_time[wwonky]), collapse = ", "),
+        collapse = " "
+        )
+      )
     }
 
     # rate of heat gain (in K/s)
     logtibble <- logtibble |>
-      mutate(delta_K_delta_t =
-               (pack_avg_temp - dplyr::lag(pack_avg_temp)) / delta_t,
-             .before = cp1)
-  }
+      mutate(
+        delta_K_delta_t =
+          (pack_avg_temp - dplyr::lag(pack_avg_temp)) / delta_t,
+        .before = cp1
+      )
 
   # we now predict temperatures, using the parameters
 
@@ -294,12 +296,35 @@ predict_temp <- function(tmodel = NULL,
   # process which updates estimates of %Hx is obscure, but could presumably be
   # black-box reverse-engineered with the aid of a simulation such as this one.
 
-  w <- which(is.na(logtibble$delta_t))
+  w <- which(is.na(logtibble$delta_t)[-length(logtibble$delta_t)])
   nsegments <- length(w)
-  wstart <- w
-  wend <- dplyr::lead(w) - 1
+  # delay the start of each segment, to avoid incomplete samples
+  wstart <- w + 1
+  wend <- dplyr::lead(w) # n.b. confusing semantics: the vector w is lagged
   wend[nsegments] <- length(logtibble$delta_t)
-  wexclude <- (wend - wstart) < min_segment_length
+  # avoid starting with a wonky temperature
+  ww <- intersect(wstart, wwonky)
+  if (length(ww) > 0) {
+    warning(paste(
+      "Delaying segment-start(s) due to wonky temperature reading(s) at",
+      paste(format_ISO8601(logtibble$date_time[ww]), collapse = ", "),
+      collapse = " "))
+    wstart = if_else(is.element(wstart, ww),
+                     # avoid hazard of indexing past end of the vector
+                     if_else(wstart < length(logtibble$delta_t),
+                             wstart + 1, wstart),
+                     wstart)
+  }
+
+  www <- intersect(wstart, wwonky)
+  if (length(www) > 0) {
+    warning(paste(
+      "Ignoring entire segment(s) due to unstable temperature readings at",
+      paste(format_ISO8601(logtibble$date_time[www]), collapse = ", "),
+      collapse = " "))
+  }
+  wexclude <- ((wend - wstart) < min_segment_length) |
+    (is.element(wstart, www))
 
   if (sum(!wexclude) == 0) {
     warning("Insufficient segment lengths, no predictions will be made!")

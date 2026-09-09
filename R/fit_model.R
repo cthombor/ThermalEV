@@ -135,7 +135,7 @@ fit_model <- function(
     warning("from_date is not before to_date")
   }
 
-  origmodel <- m
+  orig_model <- m
   m$logdata <- m$logdata |> slice(from_idx:to_idx) # restricted range model
 
   # n.b. the box-constrained optimisation of L-BFGS-B throws an error if any
@@ -206,7 +206,7 @@ fit_model <- function(
     trace = trace
   )
 
-  if ((to_idx - from_idx + 1) < length(origmodel$logdata$err_pred)) {
+  if ((to_idx - from_idx + 1) < length(orig_model$logdata$err_pred)) {
     cat("MSE of fit over the specified range:", round(MSE_of_fit(m), 3), "\n")
     # evaluate predict_temp() on the best_fit parameters, full model
     m <- predict_temp(
