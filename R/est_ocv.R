@@ -1,14 +1,18 @@
 #' est_ocv: refine an ocv_tbl, from errors in an om_model's voltage prediction
 #'
-#' Usage notes.  You might want to interpolate a smaller table e.g.
-#'  ot <- est_ocv(om_eNV50kWh)
-#'  otf <- approxfun(ot$ocv_tbl, method = "linear", rule = 2)
-#'  oti <- tibble(SOC=c(0:20)/rep(20,21)) |> mutate(OCV = otf(SOC))
-#'  e50 <- predict_temp(eNV200ac50kWh, ocv_tbl = oti)
+#' Usage notes: the new ocv_tbl can be inserted into a thmodel using
+#' predict_temp, e.g.
+#' predict_temp(eNV200ac50kWh, ocv_tbl=est_ocv(om_eNV50kWh)).
+#' This should reduce the variance in the voltage predictions; but you may
+#' also find it helpful to adjust the resistances using fit_r_to_ocv() before
+#' running est_ocv(), e.g.
+#' om <- fit_r_to_ocv(om_eNV50kWh)
 #'
 #' @param om an ocv_model
 #' @param wonky_threshold in Volts, outlier criterion (default 50)
 #' @param max_C max C-rate for OCV estimations
+#' @param tbl_size number of SOC values in the lookup table
+#' @param methodology "isoreg", "loess", "loess-sym"
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #'
 #' @returns an ocv_model with an updated ocv_tbl and voltage predictions
@@ -18,7 +22,9 @@
 #' est_ocv(om_eNV50kWh)
 est_ocv <- function(om,
                     wonky_threshold = 50,
-                    max_C = 0.1,
+                    max_C = 0.4,
+                    tbl_size = 51,
+                    methodology = "loess",
                     trace = 1)
 {
 
@@ -95,8 +101,6 @@ est_ocv <- function(om,
     ungroup() |>
     arrange(SOC)
 
-  om$ocv_tbl <- newt
-
   #run isoreg "in the other direction", to estimate its bias
   ld <- ld |> mutate(
     sod = 1 - soc # "state of discharge"
@@ -128,43 +132,76 @@ est_ocv <- function(om,
 
   om$ocv_tbl2 <- newt2
 
-  min_Hx <- round(min(ld$hx), 0)
-  max_Hx <- round(max(ld$hx), 0)
-  min_SOH <- round(min(ld$soh), 0)
-  max_SOH <- round(max(ld$soh), 0)
+  # compute the mean of ocv predictions from newt and newt2
+  otf <- approxfun(newt, method = "linear", rule = 2)
+  otf2 <- approxfun(newt2, method = "linear", rule = 2)
+  newt3 <- tibble(SOC=c(0:(tbl_size - 1)) / rep(tbl_size - 1, tbl_size)) |>
+    rowwise() |>
+    mutate(OCV = mean(otf(SOC), otf2(SOC)))
+  if (trace > 1) {
+    cat("Isoreg-predicted OCVs: ", newt3$OCV, "\n")
+    cat("  Deltas: ", summary(newt3$OCV - dplyr::lag(newt3$OCV)), "\n")
+  }
 
-  ld <- ld |> arrange(ld$date_time)
-  min_date <- floor_date(
-    as.POSIXct(dplyr::first(ld$date_time), tz = "UTC"),
-    "day")
-  max_date <- floor_date(
-    as.POSIXct(dplyr::last(ld$date_time), tz = "UTC"),
-    "day")
 
-  plot(
-    ggplot() +
-    geom_point(data = ld,
-               aes(x = soc, y = pack_volts, colour = abs(pack_amps))) +
-    geom_line(data = newt, aes(x = SOC, y = OCV), colour = "orange") +
-    geom_line(data = newt2, aes(x = SOC, y = OCV), colour = "red") +
-    theme(palette.colour.continuous = "Okabe-Ito") +
-    labs(
-      title = paste0(
-        om$name,
-        ": ", min_date,
-        " to ", max_date,
-        ". max_C = ", max_C,
-        ", Hx = (", min_Hx,
-        ", ", max_Hx, ")",
-        ", SOH = (", min_SOH,
-        ", ", max_SOH, ")"
+  # let's try loess()
+  if (methodology == "loess-sym") {
+    # this may produce a better fit if there are outliers
+    otf4 <- loess(ocv_estimate ~ soc, ld, family = "symmetric")
+  } else {
+    otf4 <- loess(ocv_estimamte ~ soc, ld)
+  }
+  predv <- predict(otf4,
+                   data.frame(
+                     soc = c(0:(tbl_size - 1)) / rep(tbl_size - 1, tbl_size)))
+  preddv <- predv - dplyr::lag(predv)
+  if (trace > 1) {
+    cat("Loess-predicted OCVs:", predv, "\n")
+    cat("  Deltas: ", summary(preddv), "\n")
+  }
+  if ((methodology != "isoreg") && (min(preddv, na.rm = TRUE) < 0)) {
+      warning("loess() of predicted ocvs is not monotonic increasing")
+  }
+  newt4 <- tibble(SOC = c(0:(tbl_size - 1)) / rep(tbl_size - 1, tbl_size),
+                  OCV = predv) |>
+    mutate(OCV = if_else(is.na(OCV), newt3$OCV, OCV))
+
+  # visualise
+  if (trace > 0) {
+    min_Hx <- round(min(ld$hx), 0)
+    max_Hx <- round(max(ld$hx), 0)
+    min_SOH <- round(min(ld$soh), 0)
+    max_SOH <- round(max(ld$soh), 0)
+    ld <- ld |> arrange(ld$date_time)
+    min_date <- floor_date(
+      as.POSIXct(dplyr::first(ld$date_time), tz = "UTC"), "day")
+    max_date <- floor_date(
+      as.POSIXct(dplyr::last(ld$date_time), tz = "UTC"), "day")
+    plot(
+      ggplot() +
+      geom_point(data = ld,
+                 aes(x = soc, y = pack_volts, colour = abs(pack_amps))) +
+      geom_line(data = newt, aes(x = SOC, y = OCV), colour = "orange") +
+      geom_line(data = newt2, aes(x = SOC, y = OCV), colour = "red") +
+      geom_line(data = newt3, aes(x = SOC, y = OCV), colour = "green") +
+      geom_line(data = newt4, aes(x = SOC, y = OCV), colour = "blue") +
+      theme(palette.colour.continuous = "Okabe-Ito") +
+      labs(
+        title = paste0(
+          om$name,
+          ": ", min_date,
+          " to ", max_date,
+          ". max_C = ", max_C,
+          ", Hx = (", min_Hx,
+          ", ", max_Hx, ")",
+          ", SOH = (", min_SOH,
+          ", ", max_SOH, ")"
+        )
       )
     )
-  )
+  }
 
-
-#
-
+  om$ocv_tbl <- if (methodology == "isoreg") newt3 else newt4
 
   # retval: an ocv_model with recomputed voltage predictions
   predict_volts(om = om, trace = trace)

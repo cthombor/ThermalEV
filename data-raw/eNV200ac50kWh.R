@@ -3,6 +3,7 @@
 eNV200ac50kWh <- thmodel_from_directory(
   logfildir = "data-raw/2026.50kWh.ac",
   name = "ac50kWh",
-  capacity = 50) |> predict_temp()
+  capacity = 50) |>
+  predict_temp(ocv_tbl = ocv_tbl_50)
 
 usethis::use_data(eNV200ac50kWh, overwrite = TRUE)

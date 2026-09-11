@@ -1,18 +1,19 @@
-#' fit_model: uses optim() to find a best-fit, with MSE criterion
+#' fit_model: uses optim() to find a best-fit of the non-resistive params,
+#' with a MSE criterion
 #'
 #' @param m a thmodel
-#' @param arrhenius_resistance in K
 #' @param heat_capacity in kJ/K
 #' @param polarisation_energy in kJ/V
 #' @param lambda_module_to_ambient in hours
-#' @param lambda_module_to_ambient in hours
+#' @param lambda_module_AC_to_ambient in hours
 #' @param fan_power in W
 #' @param COP coefficient of heatpump performance, dimensionless
-#' @param effective_pack_resistance in mOhms
-#' @param packr85 in mOhms
+#' @param effective_pack_resistance in mOhms, not optimised
+#' @param packr85 in mOhms, not optimised
+#' @param arrhenius_resistance in K, not optimised
 #' @param iter_count controls convergence on predicted temps
 #' @param min_segment_length shorter sequences of samples are ignored
-#' @param fixed_parameters length-9 Boolean vector, reduces dimension of opt
+#' @param fixed_parameters length-6 Boolean vector, reduces dimension of opt
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #' @param from_date starting date/time (for a time-restricted optimisation)
 #' @param to_date ending date/time
@@ -37,8 +38,7 @@ fit_model <- function(
     packr85 = NA,
     iter_count = 4,
     min_segment_length = 20,
-    # packr and r85 are optimised by fit_r_to_ocv()
-    fixed_parameters = c(F, F, F, F, F, F, F, T, T),
+    fixed_parameters = c(F, F, F, F, F, F),
     trace = 1,
     from_date = NULL,
     to_date = NULL,
@@ -51,18 +51,15 @@ fit_model <- function(
 #'
 #' @param x parameter list
 #'
-  fm <- function(x = c(arr, hc, pe, lp, la, fanp, COP, packr, r85)) {
+  fm <- function(x = c(hc, pe, lp, la, fanp, COP)) {
     m <- predict_temp(
       m,
-      arrhenius_resistance = x[1],
-      heat_capacity = x[2],
-      polarisation_energy = x[3],
-      lambda_module_to_ambient = x[4],
-      lambda_module_AC_to_ambient = x[5],
-      fan_power = x[6],
-      COP = x[7],
-      effective_pack_resistance = x[8],
-      packr85 = x[9],
+      heat_capacity = x[1],
+      polarisation_energy = x[2],
+      lambda_module_to_ambient = x[3],
+      lambda_module_AC_to_ambient = x[4],
+      fan_power = x[5],
+      COP = x[6],
       trace = trace
     )
     return(MSE_of_fit(m))
@@ -77,11 +74,8 @@ fit_model <- function(
 
   # param values specified in the method call have precedence. Side effect:
   # if m$parameters is malformed, throw a "subscript out of bounds" error
-  if (!is.na(effective_pack_resistance)) {
-    m$parameters[["effective_pack_resistance"]] <- effective_pack_resistance
-  }
-  if (!is.na(packr85)) {
-    m$parameters[["packr85"]] <- packr85
+  if (!is.na(heat_capacity)) {
+    m$parameters[["heat_capacity"]] <- heat_capacity
   }
   if (!is.na(polarisation_energy)) {
     m$parameters[["polarisation_energy"]] <- polarisation_energy
@@ -101,18 +95,21 @@ fit_model <- function(
   if (!is.na(arrhenius_resistance)) {
     m$parameters[["arrhenius_resistance"]] <- arrhenius_resistance
   }
-  if (!is.na(heat_capacity)) {
-    m$parameters[["heat_capacity"]] <- heat_capacity
+  if (!is.na(effective_pack_resistance)) {
+    m$parameters[["effective_pack_resistance"]] <- effective_pack_resistance
+  }
+  if (!is.na(packr85)) {
+    m$parameters[["packr85"]] <- packr85
   }
 
   # read a full set of primary factors into shorthand vars
-  arr <- m$parameters[["arrhenius_resistance"]]
   hc <- m$parameters[["heat_capacity"]]
   pe <- m$parameters[["polarisation_energy"]]
   lp <- m$parameters[["lambda_module_to_ambient"]]
   la <- m$parameters[["lambda_module_AC_to_ambient"]]
   fanp <- m$parameters[["fan_power"]]
   COP <- m$parameters[["COP"]]
+  arr <- m$parameters[["arrhenius_resistance"]]
   packr <- m$parameters[["effective_pack_resistance"]]
   r85 <- m$parameters[["packr85"]]
 
@@ -141,66 +138,45 @@ fit_model <- function(
   # n.b. the box-constrained optimisation of L-BFGS-B throws an error if any
   # dimension of the box is zero, so we add an epsilon and hope for the best
   bestfit <- optim(
-    par = c(arr, hc, pe, lp, la, fanp, COP, packr, r85),
+    par = c(hc, pe, lp, la, fanp, COP),
     fn = fm,
-    lower = c(if (fixed_parameters[1]) arr else -4000,
-              if (fixed_parameters[2]) hc else 200,
-              if (fixed_parameters[3]) pe else -16,
-              if (fixed_parameters[4]) lp else 0,
-              if (fixed_parameters[5]) la else 0,
-              if (fixed_parameters[6]) fanp else 0,
-              if (fixed_parameters[7]) COP else 0.1,
-              if (fixed_parameters[8]) packr else 40,
-              if (fixed_parameters[9]) r85 else 40),
-    upper = c(if (fixed_parameters[1]) arr - 20 else -400,
-              if (fixed_parameters[2]) hc + 2 else 1000,
-              if (fixed_parameters[3]) pe + 0.2 else 64,
-              if (fixed_parameters[4]) lp + 0.2 else 15,
-              if (fixed_parameters[5]) la + 0.2 else 10,
-              if (fixed_parameters[6]) fanp + 20 else 600,
-              if (fixed_parameters[7]) COP + 0.2 else 6,
-              if (fixed_parameters[8]) packr + 0.2 else 600,
-              if (fixed_parameters[9]) r85 + 0.2 else 600),
+    lower = c(if (fixed_parameters[1]) hc else 200,
+              if (fixed_parameters[2]) pe else -32,
+              if (fixed_parameters[3]) lp else 0,
+              if (fixed_parameters[4]) la else 0,
+              if (fixed_parameters[5]) fanp else 0,
+              if (fixed_parameters[6]) COP else 0.1),
+    upper = c(if (fixed_parameters[1]) hc + 1 else 400,
+              if (fixed_parameters[2]) pe + 0.1 else 32,
+              if (fixed_parameters[3]) lp + 0.1 else 15,
+              if (fixed_parameters[4]) la + 0.1 else 10,
+              if (fixed_parameters[5]) fanp + 10 else 600,
+              if (fixed_parameters[6]) COP + 0.1 else 6),
     control = list(maxit = iter_count,
-                   ndeps = c(10, 1, 0.1, 0.1, 0.1, 10, 0.1, 0.1, 0.1)),
+                   ndeps = c(1, 0.1, 0.1, 0.1, 10, 0.1)),
     method = "L-BFGS-B")
 
   # remove epsilons from the best-fit of fixed parameters
-  if (FALSE) {
-    best_arr = if (fixed_parameters[1]) arr else bestfit$par[1]
-    best_hc = if (fixed_parameters[2]) hc else bestfit$par[2]
-    best_pe = if (fixed_parameters[3]) pe else bestfit$par[3]
-    best_lp = if (fixed_parameters[4]) lp else bestfit$par[4]
-    best_la = if (fixed_parameters[5]) la else bestfit$par[5]
-    best_fanp = if (fixed_parameters[6]) fanp else bestfit$par[6]
-    best_COP = if (fixed_parameters[7]) COP else bestfit$par[7]
-    best_packr = if (fixed_parameters[8]) packr else bestfit$par[8]
-    best_r85 = if (fixed_parameters[9]) r85 else bestfit$par[9]
-  } else {
-    best_arr = bestfit$par[1]
-    best_hc = bestfit$par[2]
-    best_pe = bestfit$par[3]
-    best_lp = bestfit$par[4]
-    best_la = bestfit$par[5]
-    best_fanp = bestfit$par[6]
-    best_COP = bestfit$par[7]
-    best_packr = bestfit$par[8]
-    best_r85 = bestfit$par[9]
-
-  }
+  best_hc = ifelse (fixed_parameters[1], hc, bestfit$par[1])
+  best_pe = ifelse (fixed_parameters[2], pe, bestfit$par[2])
+  best_lp = ifelse (fixed_parameters[3], lp, bestfit$par[3])
+  best_la = ifelse (fixed_parameters[4], la, bestfit$par[4])
+  best_fanp = ifelse (fixed_parameters[5], fanp, bestfit$par[5])
+  best_COP = ifelse (fixed_parameters[6], COP, bestfit$par[6])
 
   # evaluate predict_temp(m) on the best_fit parameters
+  # n.b. the fit will be degraded by any epsilon-shifts in sensitive params
   m <- predict_temp(
     m,
-    arrhenius_resistance = best_arr,
     heat_capacity = best_hc,
     polarisation_energy = best_pe,
     lambda_module_to_ambient = best_lp,
     lambda_module_AC_to_ambient = best_la,
     fan_power = best_fanp,
     COP = best_COP,
-    effective_pack_resistance = best_packr,
-    packr85 = best_r85,
+    arrhenius_resistance = arr,
+    effective_pack_resistance = packr,
+    packr85 = r85,
     iter_count = iter_count,
     min_segment_length = min_segment_length,
     trace = trace
@@ -211,18 +187,18 @@ fit_model <- function(
     # evaluate predict_temp() on the best_fit parameters, full model
     m <- predict_temp(
       orig_model,
-      arrhenius_resistance = best_arr,
       heat_capacity = best_hc,
       polarisation_energy = best_pe,
       lambda_module_to_ambient = best_lp,
       lambda_module_AC_to_ambient = best_la,
       fan_power = best_fanp,
       COP = best_COP,
-      effective_pack_resistance = best_packr,
-      packr85 = best_r85,
+      arrhenius_resistance = arr,
+      effective_pack_resistance = packr,
+      packr85 = r85,
       iter_count = iter_count,
       min_segment_length = min_segment_length,
-      trace = trace
+      trace = ifelse(trace == 0, 0, trace + 1)
     )
   }
   cat("MSE of fit over the full model:", round(MSE_of_fit(m) , 3), "\n")

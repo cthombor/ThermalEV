@@ -44,16 +44,12 @@ predict_volts <- function(om = NULL,
   om$logdata <- om$logdata |>
     mutate(
       # constant resistance for soc in (0, 0.7); linear in soc for soc in (0.7,
-      # 0.85) with value packr85 at soc = 0.85; constant above 0.85
+      # 1.0) with value packr85 at soc = 0.85.
       eff_packr =
-        ifelse(
+        if_else(
           soc <= 0.70,
           effective_pack_resistance,
-          ifelse(
-            soc >= 0.85,
-            packr85,
-            effective_pack_resistance + sloper * (soc - 0.70)
-          )
+          effective_pack_resistance + sloper * (soc - 0.70)
         ) *
         exp(arrhenius_resistance *
               ((1 / 298.15) - (1 / (pack_avg_temp + 273.15)))) /

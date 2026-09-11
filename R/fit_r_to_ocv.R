@@ -3,7 +3,7 @@
 #' @param iter_count controls convergence on predicted temps
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #'
-#' @returns modified ocv_model, with best-fit params (unchanged ocv_tbl)
+#' @returns modified ocv_model, with best-fit resistive params
 #' @export
 #'
 #' @examples
@@ -43,13 +43,13 @@ fit_r_to_ocv <- function(
     par = c(start_packr, start_arr, start_packr85),
     fn = fom,
     lower = c(max(10, start_packr - 100), # packr must be resistive
-              start_arr - 2000,
+              start_arr - 1000,
               max(10, start_packr85 - 50)), # packr85 must be resistive
     upper = c(start_packr + 100,
-              min(-100, start_arr + 2000), # arr must be endothermic
+              start_arr + 1000,
               start_packr85 + 300),
     control = list(maxit = iter_count,
-                   ndeps = c(10, 50, 10)), # initial size of steps
+                   ndeps = c(1, 50, 1)), # initial size of steps
     method = "L-BFGS-B")
 
   best_packr <- bestfit$par[1]
@@ -74,28 +74,11 @@ fit_r_to_ocv <- function(
 
   mean_r <- mean(om$logdata$eff_packr, na.rm = TRUE)
 
-  # adjust hc, so that predict_heat() isn't hugely affected by the change in
-  # effective resistance. In the absence of this adjustment, the collinearity of
-  # these factors greatly reduces the rate of convergence of a (manual) stepwise
-  # optimisation using fit_model() to adjust the parameters other than the
-  # resistances (to best-fit the observed thermal behaviour of the pack), then
-  # fit_r_to_ocv() to adjust the resistances (to best-fit the observed voltage
-  # behaviour of the pack); then fit_model(), then fit_r_to_ocv(); ...
-  #
-  # note that an ocv_model() may include data from many thmodels, and is
-  # generally created by sourcing om_enV50kWh.R or om_eNV24kWh.R. "Pasting" an
-  # updated ocv_tbl, resistances, and heat_capacities from an ocv_model into a
-  # thmodel is best done using the ocv_tbl parameter of predict_temp().
-  #
-  # I think it'd be quite hazardous to fully automate this optimisation because
-  # the model is highly nonlinear.  Optima-finding heuristics may not converge
-  # rapidly in nonlinear models, and they may find a local optimum rather than a
-  # robust global one.
-  #
-
   new_hc <- start_hc * mean_r / start_mean_r
-  om$parameters[["heat_capacity"]] <- new_hc
-  cat("Mean packr = ", mean_r, "; adjusted heat capacity = ", new_hc, "\n")
+  # possibly: adjust the hc param with a best-guess, to speed optimisation
+  # in a subsequent fit_model()
+  # om$parameters[["heat_capacity"]] <- new_hc
+  cat("Mean packr = ", mean_r, "; estimated heat capacity = ", new_hc, "\n")
 
   return(om)
 }

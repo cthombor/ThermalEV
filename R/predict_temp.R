@@ -17,13 +17,13 @@
 #'
 #' @param tmodel a thmodel, optional
 #' @param effective_pack_resistance in mOhms at 298.15K for SOC <= 70 percent
-#' @param packr85 in mOhms, effective pack resistance at SOC >= 85 percent
+#' @param packr85 in mOhms, effective pack resistance at SOC = 85 percent
 #' @param polarisation_energy in kJ/V, a reversible (entropic) heat
 #' @param lambda_module_to_ambient in hours
 #' @param lambda_module_AC_to_ambient in hours
 #' @param fan_power in Watts
 #' @param COP dimensionless
-#' @param arrhenius_resistance in K, temperature dependence of effective packr
+#' @param arrhenius_resistance in K, temperature dependence of packr
 #' @param heat_capacity in kJ/K
 #' @param ocv_tbl maps SOC onto OCV, either a 2-column tibble or an om_model
 #' @param iter_count may be increased for a more accurate prediction
@@ -111,7 +111,7 @@ predict_temp <- function(tmodel = NULL,
 
   # param values specified in the method call have precedence.
   if (!is.null(ocv_tbl)) {
-    if (class(ocv_tbl) == "ocv_model") {
+    if ("ocv_model" %in% class(ocv_tbl)) {
       om <- ocv_tbl
       # om's parameters will be "pasted into" the thmodel if their values were
       # not specified in the call to predict_temp()
@@ -174,13 +174,13 @@ predict_temp <- function(tmodel = NULL,
 
   if (trace > 0) {
     cat(paste0("predict_temp:",
-               " a = ", round(arrhenius_resistance, 5),
-               ", c = ", round(heat_capacity, 5),
+               " c = ", round(heat_capacity, 5),
                ", pe = ", round(polarisation_energy, 5),
                ", λp = ", round(lambda_module_to_ambient, 5),
                ", λa = ", round(lambda_module_AC_to_ambient, 5),
                ", fanp = ", round(fan_power, 5),
                ", COP = ", round(COP, 5),
+               ", a = ", round(arrhenius_resistance, 5),
                ", r = ", round(effective_pack_resistance, 5),
                ", r85 = ", round(packr85, 5),
                "; "))
@@ -376,17 +376,12 @@ predict_temp <- function(tmodel = NULL,
       mutate(
         ssoc = soc / 1e6, # scale to (0.0, 1.0)
         # pack is modelled as having a constant resistance for soc in (0%, 70%);
-        # then linearly increasing to packr85 at soc = 85%; then constant at
-        # packr85 for soc >= 85%
+        # then linearly increasing with value packr85 at soc = 85%
         eff_packr =
           ifelse(
             ssoc <= 0.70,
             effective_pack_resistance,
-            ifelse(
-              ssoc >= 0.85,
-              packr85,
-              effective_pack_resistance + sloper * (ssoc - 0.70)
-            )
+            effective_pack_resistance + sloper * (ssoc - 0.70)
           ) * exp(arrhenius_resistance *
                     (1 / 298.15 - 1 / (pred_pack_avg_temp + 273.15))) /
           (pred_hx / 100),
@@ -399,8 +394,8 @@ predict_temp <- function(tmodel = NULL,
         pred_polarisation_heating =
           delta_v * polarisation_energy * 1000, # in Ws. Reversible.
         cooling_power = 50 * est_pwr_a_c_50w - fan_power,
-        cooling_power = if_else(cooling_power < 0, 0, cooling_power),
-        heat_pump_cooling = if_else(
+        cooling_power = ifelse(cooling_power < 0, 0, cooling_power),
+        heat_pump_cooling = ifelse(
           charge_mode == 0,
           0, # AC is cooling the cabin
           COP * cooling_power * delta_t # AC is cooling the battery

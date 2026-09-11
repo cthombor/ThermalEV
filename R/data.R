@@ -18,6 +18,12 @@
 #' @source {thmodel} R package.
 "eNV50kWh"
 
+#' ocv_tbl_50: a lookup tibble of SOC onto OCV, empirically derived for the
+#' 50kWh pack (with extremal values from the cell manufacturer's specs)
+#' @format 51 obs of 2 variables
+#' @source {thmodel} R package.
+"ocv_tbl_50"
+
 #' eNV200noac50kWh: a thmodel for my 50kWh e-NV200 before its aircon
 #' was regassed -- so it had no active cooling of its pack.
 #' @format A thmodel object.  Fields in the logdata include

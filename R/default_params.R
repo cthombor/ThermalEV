@@ -36,7 +36,7 @@
 #' Entropic heating has been well-studied in the technical literature, and it
 #' arises from several sources -- some of which are highly SOC-dependent.  I
 #' thus don't expect my single-parameter modelling of this phenomenon to be very
-#' accurate. My initial empirical investigation suggests that a couple of kJ/V
+#' accurate. My initial empirical investigation suggests that a few kJ/V
 #' is a reasonable first estimate for the 50 kWh pack.  The cells in the 24 kWh
 #' may have a different electrolyte with different salt content, but as a first
 #' approximation I'm expecting it to have half the polarisation_energy of the 50
@@ -132,20 +132,20 @@ default_params <- function(m,
   }
 
   m$parameters <- list(arrhenius_resistance = -3500,
-                       heat_capacity = 250,
+                       heat_capacity = 230,
                        polarisation_energy =
-                         ifelse(m$capacity == 24, 7, 15),
+                         ifelse(m$capacity == 24, 7, 11),
                        lambda_module_to_ambient =
-                         ifelse(m$capacity == 24, 7.5, 7.5),
+                         ifelse(m$capacity == 24, 8.5, 8.5),
                        lambda_module_AC_to_ambient =
-                         ifelse(m$model == "e-NV200", 1.1, 1.1),
+                         ifelse(m$model == "e-NV200", 1.6, 1.6),
                        fan_power =
                          ifelse(m$model == "e-NV200", 300, 0),
-                       COP = ifelse(m$model == "e-NV200", 1.5, 0),
+                       COP = ifelse(m$model == "e-NV200", 1.8, 0),
                        effective_pack_resistance =
                          ifelse(m$capacity == 24, 180, 60),
                        packr85 =
-                         ifelse(m$capacity == 24, 180, 60),
+                         ifelse(m$capacity == 24, 180, 50),
                        ocv_tbl = ot
   )
   m$modified.last.time <- now()
