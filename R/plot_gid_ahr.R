@@ -55,8 +55,10 @@ plot_gid_ahr <- function(m,
     group_by(grp_num) |>
     mutate(cumsum_delta_ah = cumsum(delta_ah),
            # start these accumulators in each predicted session
-           waste_heatJ_kWh =  waste_heatJ_kWh - first(waste_heatJ_kWh),
-           AC_energy_kWh = AC_energy_kWh - first(AC_energy_kWh)
+           waste_heatJ_kWh =  waste_heatJ_kWh -
+             dplyr::first(waste_heatJ_kWh),
+           AC_energy_kWh = AC_energy_kWh -
+             dplyr::first(AC_energy_kWh)
            ) |>
     ungroup()
 

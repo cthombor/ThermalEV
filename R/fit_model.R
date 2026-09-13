@@ -141,7 +141,7 @@ fit_model <- function(
     par = c(hc, pe, lp, la, fanp, COP),
     fn = fm,
     lower = c(if (fixed_parameters[1]) hc else 200,
-              if (fixed_parameters[2]) pe else -32,
+              if (fixed_parameters[2]) pe else -500,
               if (fixed_parameters[3]) lp else 0,
               if (fixed_parameters[4]) la else 0,
               if (fixed_parameters[5]) fanp else 0,
@@ -179,7 +179,7 @@ fit_model <- function(
     packr85 = r85,
     iter_count = iter_count,
     min_segment_length = min_segment_length,
-    trace = trace
+    trace = ifelse(trace == 0, 0, trace + 1)
   )
 
   if ((to_idx - from_idx + 1) < length(orig_model$logdata$err_pred)) {

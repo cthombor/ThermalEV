@@ -6,7 +6,7 @@
 #' @param from_idx starting index in ocv_model, ignored if !is.null(from_date)
 #' @param to_idx ending index in ocv_model, ignored if !is.null(to_date)
 #' @param from_temp lower limit of battery temps to be analysed
-#' @param to_temp upper limt of battery temps to be analysed
+#' @param to_temp upper limit of battery temps to be analysed
 #' @param max_amps limiting amperage for plotted points
 #' @param wonky_threshold in Volts, outlier criterion (default 50)
 #' @param scatter TRUE for scatterplot, FALSE for box and whiskers
@@ -76,7 +76,7 @@ plot_volts_pred <- function(m,
     is.na(pd$pack_amps) |
     is.na(pd$pred_pack_volts)
   min_temp <- if (is.null(from_temp)) -30 else from_temp
-  max_temp <- if (is.null(from_temp)) 100 else to_temp
+  max_temp <- if (is.null(to_temp)) 100 else to_temp
   extreme_temps <- (pd$pack_avg_temp < min_temp) | (pd$pack_avg_temp > max_temp)
   high_amps <- if (is.null(max_amps))
     rep(F, length(pd$pack_amps)) else
@@ -91,7 +91,7 @@ plot_volts_pred <- function(m,
     filter_out(singletons | wonky | missings | extreme_temps | high_amps)
 
   if (nrow(pd) == 0) {
-    warning("No data to plot!")
+    stop("No data to plot")
   }
 
   min_Hx <- round(min(pd$hx), 0)
@@ -101,17 +101,7 @@ plot_volts_pred <- function(m,
   pd <- pd |> mutate(
     amperage = as_factor(round(pack_amps / 30, 0) * 30),
     temps = as_factor(round(pack_avg_temp / 10, 0) * 10),
-#    temps = as_factor(if_else(
-#      pack_avg_temp < 15, "< 15",
-#      if_else(pack_avg_temp < 25, "[15, 25)",
-#              if_else(pack_avg_temp < 35, "[25, 35)",
-#                     ">= 35")))),
-#    temps = fct_relevel(temps, "< 15", "[15, 25)", "[25, 35)", ">= 35"),
-  'SOC' = as_factor(round(nboxes*soc,0)/nboxes))
-#  mycolors = c("< 15" = "blue",
-#               "[15, 25)"= "green",
-#               "[25, 35)" = "orange",
-#               ">= 35" = "red")
+    'SOC' = as_factor(round(nboxes*soc,0)/nboxes))
   suppressWarnings(
     pd <- pd |> mutate(
       temps = fct_recode(
@@ -120,15 +110,12 @@ plot_volts_pred <- function(m,
         "[5, 15)\u2009°C" = "10",
         "[15, 25)\u2009°C" = "20",
         "[25, 35)\u2009°C" = "30",
-        "> 35\u2009°C" = "40"
-      )
-  ))
+        "> 35\u2009°C" = "40")))
   mycolors = c("< 5\u2009°C"  = "violet",
                "[5, 15)\u2009°C" = "blue",
                "[15, 25)\u2009°C" = "green",
                "[25, 35)\u2009°C" = "orange",
                "> 35\u2009°C" = "red")
-
   if (scatter) {
     e <- ggplot(pd, aes(x=SOC, y=pred_pack_volts - pack_volts)) +
       theme(palette.colour.continuous = "Okabe-Ito")
@@ -160,10 +147,10 @@ plot_volts_pred <- function(m,
                paste0(
                  ifelse(is.null(from_temp),
                         ", temp",
-                        paste0(", ", from_temp, "≤ temp")),
+                        paste0(", ", from_temp, " ≤ temp")),
                  ifelse(is.null(to_temp),
                         "",
-                        paste(" ≤ ", to_temp))
+                        paste0(" ≤ ", to_temp))
                )),
         ifelse(is.null(max_amps),
                "",

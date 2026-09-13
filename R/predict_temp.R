@@ -300,8 +300,7 @@ predict_temp <- function(tmodel = NULL,
   nsegments <- length(w)
   # delay the start of each segment, to avoid incomplete samples
   wstart <- w + 1
-  wend <- dplyr::lead(w) # n.b. confusing semantics: the vector w is lagged
-  wend[nsegments] <- length(logtibble$delta_t)
+  wend <- dplyr::lead(w, default = length(logtibble$delta_t) + 1) - 1
   # avoid starting with a wonky temperature
   ww <- intersect(wstart, wwonky)
   if (length(ww) > 0) {
@@ -310,7 +309,6 @@ predict_temp <- function(tmodel = NULL,
       paste(format_ISO8601(logtibble$date_time[ww]), collapse = ", "),
       collapse = " "))
     wstart = if_else(is.element(wstart, ww),
-                     # avoid hazard of indexing past end of the vector
                      if_else(wstart < length(logtibble$delta_t),
                              wstart + 1, wstart),
                      wstart)
@@ -323,35 +321,37 @@ predict_temp <- function(tmodel = NULL,
       paste(format_ISO8601(logtibble$date_time[www]), collapse = ", "),
       collapse = " "))
   }
-  wexclude <- ((wend - wstart) < min_segment_length) |
+  segexclude <- ((wend - wstart) < min_segment_length) |
     (is.element(wstart, www))
 
-  if (sum(!wexclude) == 0) {
+  if (sum(!segexclude) == 0) {
     warning("Insufficient segment lengths, no predictions will be made!")
   }
 
   segnumv = rep(0, length(logtibble$delta_t))
-  for (i in seq(nsegments)[which(!wexclude)]) {
+  for (i in seq(nsegments)[which(!segexclude)]) {
     segnumv[wstart[i]:wend[i]] = i
   }
+  # n.b. segnum 0 is discontinuous, and we don't predict in it
 
-  # the sampling interval is a parameter in LeafSpy which
-  # we estimate on a per-segment basis.
-  #n.b. we don't predict in segnum == 0
   logtibble <- logtibble |>
     mutate(segnum = segnumv, .before = pack_avg_temp) |>
     group_by(segnum) |>
-    mutate(sampling_interval = mean(delta_t, na.rm = T),
-           pred_pack_avg_temp =
-             if_else(segnum == 0, NA, first(pack_avg_temp)),
-           pred_hx =
-             if_else(segnum == 0, NA, first(hx)),
-           # n.b. these time constants are in hours
-           EMA_parameter_module_to_ambient =
-             min(1.0, sampling_interval / (lambda_module_to_ambient * 3600)),
-           EMA_parameter_module_AC_to_ambient =
-             min(1.0, sampling_interval / (lambda_module_AC_to_ambient * 3600)),
-           .before = pack_avg_temp) |>
+    mutate(
+      # the sampling interval is a parameter in LeafSpy which we estimate on a
+      # per-segment basis.
+      sampling_interval = mean(delta_t, na.rm = T),
+      pred_pack_avg_temp =
+        if_else(segnum == 0, NA, dplyr::first(pack_avg_temp)),
+      pred_hx =
+        if_else(segnum == 0, NA, dplyr::first(hx)),
+      # n.b. these time constants are in hours
+      EMA_parameter_module_to_ambient =
+        min(1.0, sampling_interval / (lambda_module_to_ambient * 3600)),
+      EMA_parameter_module_AC_to_ambient =
+        min(1.0, sampling_interval / (lambda_module_AC_to_ambient * 3600)),
+      .before = pack_avg_temp
+    ) |>
     ungroup()
 
   for (iternum in 1:iter_count) {
@@ -362,7 +362,7 @@ predict_temp <- function(tmodel = NULL,
     # if iternum==1, we use the pack temperature at the beginning of a
     # segment to estimate the effective pack resistance for the whole of
     # the segment
-    for (i in seq(nsegments)[which(!wexclude)]) {
+    for (i in seq(nsegments)[which(!segexclude)]) {
       logtibble$pred_pack_avg_temp[wstart[i]] <-
         logtibble$pack_avg_temp[wstart[i]]
     }
@@ -389,10 +389,14 @@ predict_temp <- function(tmodel = NULL,
         pred_Joule_heating =
           (pack_amps * pack_amps + 0.5 * slope_amps * slope_amps) *
           eff_packr / 1000 * delta_t, # in Ws.  Note: r is in mOhms.
-        delta_v = pack_volts -
-          dplyr::lag(pack_volts, default = first(pack_volts)),
+        first_pv = dplyr::first(pack_volts), # for debugging
+        delta_v = if_else(segnum != 0,
+                          pack_volts -
+                            dplyr::lag(pack_volts,
+                                       default = dplyr::first(pack_volts)),
+                          0.0), # to aid debugging searches for large delta_v
         pred_polarisation_heating =
-          delta_v * polarisation_energy * 1000, # in Ws. Reversible.
+          delta_v * polarisation_energy * 1000, # in Ws
         cooling_power = 50 * est_pwr_a_c_50w - fan_power,
         cooling_power = ifelse(cooling_power < 0, 0, cooling_power),
         heat_pump_cooling = ifelse(
@@ -438,7 +442,7 @@ predict_temp <- function(tmodel = NULL,
     pred_temp_v <- logtibble$pack_avg_temp
     heat_in_v <- logtibble$pred_heating
     ambient_v <- logtibble$ambient
-    for (i in seq(nsegments)[which(!wexclude)]) {
+    for (i in seq(nsegments)[which(!segexclude)]) {
       prevpred <- pred_temp_v[wstart[i]]
       for (j in seq(wstart[i] + 1, wend[i])) {  # a scalar inner loop, ouch!
           nextpred <- prevpred * EMA_param_complement[j] +
@@ -451,7 +455,7 @@ predict_temp <- function(tmodel = NULL,
 
     # we mask unpredicted temps with NA, to avoid skewing statistics of fit
     pred_temp_v[wstart] <- NA
-    for (i in seq(nsegments)[which(wexclude)]) {
+    for (i in seq(nsegments)[which(segexclude)]) {
       pred_temp_v[wstart[i]:wend[i]] <- NA
     }
 

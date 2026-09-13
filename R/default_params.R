@@ -143,7 +143,7 @@ default_params <- function(m,
                          ifelse(m$model == "e-NV200", 300, 0),
                        COP = ifelse(m$model == "e-NV200", 1.8, 0),
                        effective_pack_resistance =
-                         ifelse(m$capacity == 24, 180, 60),
+                         ifelse(m$capacity == 24, 180, 50),
                        packr85 =
                          ifelse(m$capacity == 24, 180, 50),
                        ocv_tbl = ot

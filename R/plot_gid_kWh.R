@@ -49,8 +49,10 @@ plot_gid_kWh <- function(m,
     mutate(cumsum_delta_kWh = cumsum(delta_kWh),
            cumsum_delta_kWh2 = cumsum(delta_kWh2),
            # restart these accumulators in each group
-           waste_heatJ_kWh =  waste_heatJ_kWh - first(waste_heatJ_kWh),
-           AC_energy_kWh = AC_energy_kWh - first(AC_energy_kWh)
+           waste_heatJ_kWh =  waste_heatJ_kWh -
+             dplyr::first(waste_heatJ_kWh),
+           AC_energy_kWh = AC_energy_kWh -
+             dplyr::first(AC_energy_kWh)
            ) |>
     ungroup()
 
@@ -82,15 +84,16 @@ plot_gid_kWh <- function(m,
     warning("No data to plot!")
   }
 
-  lcdk <- last(pd$cumsum_delta_kWh)
-  lcdk2 <- last(pd$cumsum_delta_kWh2)
-  lwhk <- last(pd$waste_heatJ_kWh)
-  lACe <- last(pd$AC_energy_kWh)
+  lcdk <- dplyr::last(pd$cumsum_delta_kWh)
+  lcdk2 <- dplyr::last(pd$cumsum_delta_kWh2)
+  lwhk <- dplyr::last(pd$waste_heatJ_kWh)
+  lACe <- dplyr::last(pd$AC_energy_kWh)
   cat(round(lcdk, 3), "kWh to pack, ",
       round(lwhk, 3), "kWh Joule heating, ",
       round(lACe, 3), "kWh AC consumption\n")
   cat("Alternative estimation of charging kWh:", round(lcdk2,3), "\n")
-  cat("kWh added: ", round((last(pd$gids) - first(pd$gids)) * 0.08, 2), "\n")
+  cat("kWh added: ", round((last(pd$gids) -
+                              dplyr::first(pd$gids)) * 0.08, 2), "\n")
   cat("Estimated kWh added: ", round(lcdk - lwhk - lACe, 3), "\n")
   cat("Estimated efficiency: ", round((lcdk - lwhk - lACe) / lcdk, 3), "\n")
 
