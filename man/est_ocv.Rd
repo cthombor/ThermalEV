@@ -4,24 +4,51 @@
 \alias{est_ocv}
 \title{est_ocv: refine an ocv_tbl, from errors in an om_model's voltage prediction}
 \usage{
-est_ocv(om, wonky_threshold = 50, trace = 2)
+est_ocv(
+  om,
+  wonky_threshold = 50,
+  max_C = 0.4,
+  from_temp = NULL,
+  to_temp = NULL,
+  from_soc = NULL,
+  to_soc = NULL,
+  tbl_size = 51,
+  methodology = "loess",
+  trace = 1
+)
 }
 \arguments{
 \item{om}{an ocv_model}
 
 \item{wonky_threshold}{in Volts, outlier criterion (default 50)}
 
+\item{max_C}{max C-rate for OCV estimations}
+
+\item{from_temp}{lower limit of battery temps to be analysed}
+
+\item{to_temp}{upper limit of battery temps to be analysed}
+
+\item{from_soc}{lower limit of SOC (in 0-1) to be analysed}
+
+\item{to_soc}{upper limit of SOC to be analysed}
+
+\item{tbl_size}{number of SOC values in the lookup table}
+
 \item{trace}{0 for silent, 1 for minimal, 2 for verbose}
+
+\item{methodology:}{"isoreg", "loess", "loess-sym", cir"}
 }
 \value{
 an ocv_model with an updated ocv_tbl and voltage predictions
 }
 \description{
-Usage notes.  You might want to interpolate a smaller table e.g.
- ot <- est_ocv(om_eNV50kWh)
- otf <- approxfun(x = ot$SOC, y = ot$OCV, method = "linear", rule = 2)
- oti <- tibble(SOC=c(0:20)/rep(20,21)) |> mutate(OCV = otf(SOC)))
- e50 <- predict_temp(eNV200ac50kWh, ocv_tbl = oti)
+Usage notes: the new ocv_tbl can be inserted into a thmodel using
+predict_temp, e.g.
+predict_temp(eNV200ac50kWh, ocv_tbl=est_ocv(om_eNV50kWh)).
+This should reduce the variance in the voltage predictions; but you may
+also find it helpful to adjust the resistances using fit_r_to_ocv() before
+running est_ocv(), e.g.
+om <- fit_r_to_ocv(om_eNV50kWh)
 }
 \examples{
 est_ocv(om_eNV50kWh)

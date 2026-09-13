@@ -10,9 +10,13 @@ plot_volts_pred(
   to_date = NULL,
   from_idx = NULL,
   to_idx = NULL,
+  from_temp = NULL,
+  to_temp = NULL,
+  max_amps = NULL,
   wonky_threshold = 50,
+  nboxes = 20,
   scatter = FALSE,
-  scale_colours = 1
+  by_amps = TRUE
 )
 }
 \arguments{
@@ -26,11 +30,19 @@ plot_volts_pred(
 
 \item{to_idx}{ending index in ocv_model, ignored if !is.null(to_date)}
 
+\item{from_temp}{lower limit of battery temps to be analysed}
+
+\item{to_temp}{upper limit of battery temps to be analysed}
+
+\item{max_amps}{limiting amperage for plotted points}
+
 \item{wonky_threshold}{in Volts, outlier criterion (default 50)}
+
+\item{nboxes}{controls the SOC precision of boxplots}
 
 \item{scatter}{TRUE for scatterplot, FALSE for box and whiskers}
 
-\item{scale_colours}{colours indicate pack_temp (0), pack_amps (1)}
+\item{by_amps}{colours indicate pack_temp (F), pack_amps (T)}
 }
 \value{
 an Environment

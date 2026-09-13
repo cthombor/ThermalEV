@@ -28,8 +28,8 @@ new_thmodel <- function() {
       capacity = NULL, # nominal capacity, in kWh
       filnm = "", # provenance (a csv filnm)
       fildir = "", # provenance (dir relative to a homedir), no trailing "/"
-      created.time = now(), # named untidily, as in xts
-      modified.last.time = now(),
+      created.time = lubridate::now(), # named untidily, as in xts
+      modified.last.time = lubridate::now(),
       parameters = list(),
       # if length(m$parameters) > 0, m$logdata must have the predicted temps.
       fit = list(),
@@ -60,6 +60,6 @@ new_thmodel <- function() {
 # todo: dispatch as S3 method through set_name() or set()
 set_name_thmodel <- function(m, nm) {
   m$name <- nm
-  m$modified.last.time <- now()
+  m$modified.last.time <- lubridate::now()
   return(m)
 }

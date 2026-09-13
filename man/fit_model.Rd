@@ -2,7 +2,8 @@
 % Please edit documentation in R/fit_model.R
 \name{fit_model}
 \alias{fit_model}
-\title{fit_model: uses optim() to find a best-fit, with MSE criterion}
+\title{fit_model: uses optim() to find a best-fit of the non-resistive params,
+with a MSE criterion}
 \usage{
 fit_model(
   m = NULL,
@@ -17,7 +18,7 @@ fit_model(
   packr85 = NA,
   iter_count = 4,
   min_segment_length = 20,
-  fixed_parameters = c(F, F, F, F, F, F, F, T, T),
+  fixed_parameters = c(F, F, F, F, F, F),
   trace = 1,
   from_date = NULL,
   to_date = NULL,
@@ -28,7 +29,7 @@ fit_model(
 \arguments{
 \item{m}{a thmodel}
 
-\item{arrhenius_resistance}{in K}
+\item{arrhenius_resistance}{in K, not optimised}
 
 \item{heat_capacity}{in kJ/K}
 
@@ -36,19 +37,21 @@ fit_model(
 
 \item{lambda_module_to_ambient}{in hours}
 
+\item{lambda_module_AC_to_ambient}{in hours}
+
 \item{fan_power}{in W}
 
 \item{COP}{coefficient of heatpump performance, dimensionless}
 
-\item{effective_pack_resistance}{in mOhms}
+\item{effective_pack_resistance}{in mOhms, not optimised}
 
-\item{packr85}{in mOhms}
+\item{packr85}{in mOhms, not optimised}
 
 \item{iter_count}{controls convergence on predicted temps}
 
 \item{min_segment_length}{shorter sequences of samples are ignored}
 
-\item{fixed_parameters}{length-9 Boolean vector, reduces dimension of opt}
+\item{fixed_parameters}{length-6 Boolean vector, reduces dimension of opt}
 
 \item{trace}{0 for silent, 1 for minimal, 2 for verbose}
 
@@ -66,7 +69,8 @@ fit_model(
 modified thmodel, with best-fit predictions and parameters
 }
 \description{
-fit_model: uses optim() to find a best-fit, with MSE criterion
+fit_model: uses optim() to find a best-fit of the non-resistive params,
+with a MSE criterion
 }
 \examples{
 m <- fit_model(thmodels = list("eNV200ac50kWh"))

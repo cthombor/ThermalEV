@@ -15,10 +15,11 @@
 #'
 #' Initial estimates of parameters are hardcoded in default_params().
 #'
-#' @param tmodel a thmodel, optional
+#' @param tmodel a thmodel, or a csv from LeafSpy (default: log26Jan2026.csv)
 #' @param effective_pack_resistance in mOhms at 298.15K for SOC <= 70 percent
 #' @param packr85 in mOhms, effective pack resistance at SOC = 85 percent
 #' @param polarisation_energy in kJ/V, a reversible (entropic) heat
+#' @param polarisation_heat in J/(ΔI)², enthalpy of a polarisation shift
 #' @param lambda_module_to_ambient in hours
 #' @param lambda_module_AC_to_ambient in hours
 #' @param fan_power in Watts
@@ -47,6 +48,7 @@ predict_temp <- function(tmodel = NULL,
                          effective_pack_resistance = NA,
                          packr85 = NA,
                          polarisation_energy = NA,
+                         polarisation_heat = NA,
                          lambda_module_to_ambient = NA,
                          lambda_module_AC_to_ambient = NA,
                          fan_power = NA,
@@ -186,7 +188,9 @@ predict_temp <- function(tmodel = NULL,
                "; "))
   }
   if (trace > 1) {
-    print(ocv_tbl) # n.b. this is irrelevant to thermal predictions
+    # n.b. ocv_tbl is irrelevant to thermal predictions
+    cat("ocv_tbl:\n")
+    print(ocv_tbl, max_footer_lines = 0)
   }
 
   if (COP < 0.0) {
@@ -198,12 +202,14 @@ predict_temp <- function(tmodel = NULL,
     #compute delta_t for runs of near-consecutive samples
     logtibble <- logtibble |>
       mutate(delta_t = date_time - dplyr::lag(date_time))
-    # n.b. dplyr's redefinition of lag/lead is vaguely intuitive, if you imagine
-    # lag() as an element-wise operation which retrieves the "previous" value in
-    # a vector, rather than taking a vector-centric view -- in which a vector is
-    # shifted "backwards" (toward lower-indexed/earlier values) by a lag.  This
-    # is a direct -- and hazardous -- semantic conflict with xts::lag() and
-    # stats::lag().
+    # n.b. dplyr's annoying redefinition of lag/lead is arguably intuitive, if
+    # you imagine lag() as an element-wise operation which retrieves the
+    # "previous" value in a vector, rather than taking a vector-centric view --
+    # in which a vector is shifted "backwards" (toward lower-indexed/earlier
+    # values) by a lag.  This is a direct -- and hazardous -- semantic conflict
+    # with stats::lag() and xts::lag().  dplyr also masks first() and last(),
+    # thereby creating additional hazards, unless you load the conflicted
+    # package before loading dplyr.
 
     # we make a rude estimate of the sampling interval over the whole file
     # in order to count missing samples (with reasonable accuracy)
@@ -240,7 +246,7 @@ predict_temp <- function(tmodel = NULL,
     if (length(wwonky) > 0) {
       warning(paste(
         "Implausible temperature reading(s) at",
-        paste(format_ISO8601(logtibble$date_time[wwonky]), collapse = ", "),
+        paste(lubridate::format_ISO8601(logtibble$date_time[wwonky]), collapse = ", "),
         collapse = " "
         )
       )
@@ -268,7 +274,7 @@ predict_temp <- function(tmodel = NULL,
   # correlation with the prediction error in our model
   multilag <- function(x, lags = 1:2) {
     names(lags) <- as.character(lags)
-    purrr::map_dfr(lags, lag, x = x)
+    purrr::map_dfr(lags, dplyr::lag, x = x)
   }
   logtibble <- logtibble |>
     mutate(
@@ -306,7 +312,7 @@ predict_temp <- function(tmodel = NULL,
   if (length(ww) > 0) {
     warning(paste(
       "Delaying segment-start(s) due to wonky temperature reading(s) at",
-      paste(format_ISO8601(logtibble$date_time[ww]), collapse = ", "),
+      paste(lubridate::format_ISO8601(logtibble$date_time[ww]), collapse = ", "),
       collapse = " "))
     wstart = if_else(is.element(wstart, ww),
                      if_else(wstart < length(logtibble$delta_t),
@@ -318,7 +324,7 @@ predict_temp <- function(tmodel = NULL,
   if (length(www) > 0) {
     warning(paste(
       "Ignoring entire segment(s) due to unstable temperature readings at",
-      paste(format_ISO8601(logtibble$date_time[www]), collapse = ", "),
+      paste(lubridate::format_ISO8601(logtibble$date_time[www]), collapse = ", "),
       collapse = " "))
   }
   segexclude <- ((wend - wstart) < min_segment_length) |
@@ -477,7 +483,7 @@ predict_temp <- function(tmodel = NULL,
                       heat_pump_cooling / 1000 / 3600)), # in kWh
              .before = "cp1")
     m$logdata <- logtibble
-    m$modified.last.time <- now()
+    m$modified.last.time <- lubridate::now()
 
     # curiously, xts insists on UTC for stored dates & times
     from_idx <- ifelse(is.null(from_date),
@@ -511,9 +517,9 @@ predict_temp <- function(tmodel = NULL,
           ")\n")
       if (iternum == iter_count) {
         cat("    at (",
-            format_ISO8601(logtibble$date_time[minpew]),
+            lubridate::format_ISO8601(logtibble$date_time[minpew]),
             ",",
-            format_ISO8601(logtibble$date_time[maxpew]),
+            lubridate::format_ISO8601(logtibble$date_time[maxpew]),
             ")\n")
       }
     }
@@ -530,9 +536,9 @@ predict_temp <- function(tmodel = NULL,
       )
       if (iternum == iter_count) {
         cat("    at (",
-            format_ISO8601(logtibble$date_time[minpe]),
+            lubridate::format_ISO8601(logtibble$date_time[minpe]),
             ",",
-            format_ISO8601(logtibble$date_time[maxpe]),
+            lubridate::format_ISO8601(logtibble$date_time[maxpe]),
             ")\n"
         )
       }
@@ -540,7 +546,7 @@ predict_temp <- function(tmodel = NULL,
   }
 
   if (trace > 0) {
-    cat(" MSE =", round(MSE_of_fit(m), 2), "\n")
+    cat(" MSE =", round(MSE_of_fit(m), 4), "\n")
   }
 
   return(m)

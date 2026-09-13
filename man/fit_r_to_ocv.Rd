@@ -16,7 +16,7 @@ fit_r_to_ocv(om = new_ocv_model(), iter_count = 4, trace = 1)
 \item{x}{parameter list}
 }
 \value{
-modified ocv_model, with best-fit params (unchanged ocv_tbl)
+modified ocv_model, with best-fit resistive params
 }
 \description{
 fit_r_to_ocv: uses optim() to find a best-fit pack resistance to an ocv_model

@@ -52,7 +52,7 @@ they do add up to a significant cooling for each 10V drop in the pack's OCV.
 Entropic heating has been well-studied in the technical literature, and it
 arises from several sources -- some of which are highly SOC-dependent.  I
 thus don't expect my single-parameter modelling of this phenomenon to be very
-accurate. My initial empirical investigation suggests that a couple of kJ/V
+accurate. My initial empirical investigation suggests that a few kJ/V
 is a reasonable first estimate for the 50 kWh pack.  The cells in the 24 kWh
 may have a different electrolyte with different salt content, but as a first
 approximation I'm expecting it to have half the polarisation_energy of the 50

@@ -9,6 +9,7 @@ predict_temp(
   effective_pack_resistance = NA,
   packr85 = NA,
   polarisation_energy = NA,
+  polarisation_heat = NA,
   lambda_module_to_ambient = NA,
   lambda_module_AC_to_ambient = NA,
   fan_power = NA,
@@ -32,9 +33,11 @@ predict_temp(
 
 \item{effective_pack_resistance}{in mOhms at 298.15K for SOC <= 70 percent}
 
-\item{packr85}{in mOhms, effective pack resistance at SOC >= 85 percent}
+\item{packr85}{in mOhms, effective pack resistance at SOC = 85 percent}
 
 \item{polarisation_energy}{in kJ/V, a reversible (entropic) heat}
+
+\item{polarisation_heat}{in J/(ΔI)², enthalpy of a polarisation shift}
 
 \item{lambda_module_to_ambient}{in hours}
 
@@ -44,7 +47,7 @@ predict_temp(
 
 \item{COP}{dimensionless}
 
-\item{arrhenius_resistance}{in K, temperature dependence of effective packr}
+\item{arrhenius_resistance}{in K, temperature dependence of packr}
 
 \item{heat_capacity}{in kJ/K}
 

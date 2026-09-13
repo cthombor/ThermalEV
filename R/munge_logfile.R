@@ -30,7 +30,7 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
   logfilpath <- paste0(here::here(logfildir), "/", logfilnm)
 
   # read headers to determine if it's already munged
-  tbl <- read_csv(
+  tbl <- readr::read_csv(
     logfilpath,
     name_repair = "unique_quiet",
     n_max = 1,
@@ -39,17 +39,17 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
   already_munged <- !("VIN" %in% names(tbl))
 
   if (already_munged) {
-    tbl <- read_csv(logfilpath,
+    tbl <- readr::read_csv(logfilpath,
                     name_repair = "unique_quiet",
                     # to cope with the occasional "na"
-                    col_types = cols(
-                      '12v Bat Volts' = col_character(),
-                      '12v Bat Amps' = col_character(),
-                      `GPS Status` = col_character() # four bits, in hex format
+                    col_types = readr::cols(
+                      '12v Bat Volts' = readr::col_character(),
+                      '12v Bat Amps' = readr::col_character(),
+                      `GPS Status` = readr::col_character() # four bits, in hex format
                     ),
                     show_col_types = FALSE)
   } else {
-    tbl <- read_csv(
+    tbl <- readr::read_csv(
       logfilpath,
       name_repair = "unique_quiet",
       # n.b. dates in LeafSpy csv files are deeply ambiguous for the first
@@ -58,13 +58,13 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
       # wrong value for the USonian_dates flag.  A plot_log will reveal
       # inversions in what should be a strictly increasing set of odometer
       # readouts in a set of csv files from the same vehicle.
-      col_types = cols(
+      col_types = readr::cols(
         `Date/Time` = col_datetime(
           ifelse(USonian_dates, "%m/%d/%Y%.%H:%M:%S", "%d/%m/%Y%.%H:%M:%S")
         ),
-        '12v Bat Volts' = col_character(),
-        '12v Bat Amps' = col_character(),
-        'GPS Status' = col_character()
+        '12v Bat Volts' = readr::col_character(),
+        '12v Bat Amps' = readr::col_character(),
+        'GPS Status' = readr::col_character()
       ),
       show_col_types = FALSE
     )
@@ -172,7 +172,7 @@ munge_logfile <- function(logfilnm = "log26Jan2026.csv",
 
   m <- new_thmodel()
   m$name <- ifelse(is.null(logname),
-                   str_sub(logfilnm, 1, (nchar(logfilnm) - 4)),
+                   stringr::str_sub(logfilnm, 1, (nchar(logfilnm) - 4)),
                    logname)
   m$filnm <- logfilnm
   m$fildir <- logfildir

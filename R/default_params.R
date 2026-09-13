@@ -78,7 +78,7 @@ default_params <- function(m,
   stopifnot(!is.na(m$capacity))
   stopifnot(!is.null(m$model))
   stopifnot(!is.null(ot) ||
-              !(is_tibble(ot) && names(ot) == c("SOC", "OCV")))
+              !(tibble::is_tibble(ot) && names(ot) == c("SOC", "OCV")))
 
   if (is.null(ot)) {
     ot = tibble(
@@ -143,11 +143,11 @@ default_params <- function(m,
                          ifelse(m$model == "e-NV200", 300, 0),
                        COP = ifelse(m$model == "e-NV200", 1.8, 0),
                        effective_pack_resistance =
-                         ifelse(m$capacity == 24, 180, 50),
+                         ifelse(m$capacity == 24, 180, 60),
                        packr85 =
-                         ifelse(m$capacity == 24, 180, 50),
+                         ifelse(m$capacity == 24, 180, 60),
                        ocv_tbl = ot
   )
-  m$modified.last.time <- now()
+  m$modified.last.time <- lubridate::now()
   return(m)
 }

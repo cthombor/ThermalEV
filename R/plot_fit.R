@@ -60,12 +60,12 @@ plot_fit <- function(m,
     cat("Underprediction by",
         round(pd$err_pred[minpe], 2),
         "degrees at",
-        format_ISO8601(pd$date_time[minpe]),
+        lubridate::format_ISO8601(pd$date_time[minpe]),
         "\n")
     cat("Overprediction by",
         round(pd$err_pred[maxpe], 2),
         "degrees at",
-        format_ISO8601(pd$date_time[maxpe]),
+        lubridate::format_ISO8601(pd$date_time[maxpe]),
         "\n")
 
     # mod <- lm(err_pred ~ slope_amps + acc_amps, pd)
