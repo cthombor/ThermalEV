@@ -3,7 +3,8 @@
 #'
 #' @param m a thmodel
 #' @param heat_capacity in kJ/K
-#' @param polarisation_energy in kJ/V
+#' @param polarisation_rev in kJ/V
+#' @param polarisation_irr dimensionless, irreversible heat of polarisation
 #' @param lambda_module_to_ambient in hours
 #' @param lambda_module_AC_to_ambient in hours
 #' @param fan_power in W
@@ -29,7 +30,8 @@ fit_model <- function(
     m = NULL,
     arrhenius_resistance = NA,
     heat_capacity = NA,
-    polarisation_energy = NA,
+    polarisation_rev = NA,
+    polarisation_irr = NA,
     lambda_module_to_ambient = NA,
     lambda_module_AC_to_ambient = NA,
     fan_power = NA,
@@ -38,7 +40,7 @@ fit_model <- function(
     packr85 = NA,
     iter_count = 4,
     min_segment_length = 20,
-    fixed_parameters = c(F, F, F, F, F, F),
+    fixed_parameters = c(F, F, F, F, F, F, F),
     trace = 1,
     from_date = NULL,
     to_date = NULL,
@@ -51,15 +53,16 @@ fit_model <- function(
 #'
 #' @param x parameter list
 #'
-  fm <- function(x = c(hc, pe, lp, la, fanp, COP)) {
+  fm <- function(x = c(hc, prev, pirr, lp, la, fanp, COP)) {
     m <- predict_temp(
       m,
       heat_capacity = x[1],
-      polarisation_energy = x[2],
-      lambda_module_to_ambient = x[3],
-      lambda_module_AC_to_ambient = x[4],
-      fan_power = x[5],
-      COP = x[6],
+      polarisation_rev = x[2],
+      polarisation_irr = x[3],
+      lambda_module_to_ambient = x[4],
+      lambda_module_AC_to_ambient = x[5],
+      fan_power = x[6],
+      COP = x[7],
       trace = trace
     )
     return(MSE_of_fit(m))
@@ -67,18 +70,23 @@ fit_model <- function(
 
   if (is.null(m)) m <- munge_logfile()  # use our default logfile
 
-  stopifnot((length(m$parameters) == 0) || (length(m$parameters) == 10))
   if (length(m$parameters) == 0) {
     m <- default_params(m)
   }
+  stopifnot(length(m$parameters) == 11)
+
+  stopifnot(length(fixed_parameters) == 7)
 
   # param values specified in the method call have precedence. Side effect:
   # if m$parameters is malformed, throw a "subscript out of bounds" error
   if (!is.na(heat_capacity)) {
     m$parameters[["heat_capacity"]] <- heat_capacity
   }
-  if (!is.na(polarisation_energy)) {
-    m$parameters[["polarisation_energy"]] <- polarisation_energy
+  if (!is.na(polarisation_rev)) {
+    m$parameters[["polarisation_rev"]] <- polarisation_rev
+  }
+  if (!is.na(polarisation_irr)) {
+    m$parameters[["polarisation_irr"]] <- polarisation_irr
   }
   if (!is.na(lambda_module_to_ambient)) {
     m$parameters[["lambda_module_to_ambient"]] <- lambda_module_to_ambient
@@ -104,7 +112,8 @@ fit_model <- function(
 
   # read a full set of primary factors into shorthand vars
   hc <- m$parameters[["heat_capacity"]]
-  pe <- m$parameters[["polarisation_energy"]]
+  prev <- m$parameters[["polarisation_rev"]]
+  pirr <- m$parameters[["polarisation_irr"]]
   lp <- m$parameters[["lambda_module_to_ambient"]]
   la <- m$parameters[["lambda_module_AC_to_ambient"]]
   fanp <- m$parameters[["fan_power"]]
@@ -138,38 +147,42 @@ fit_model <- function(
   # n.b. the box-constrained optimisation of L-BFGS-B throws an error if any
   # dimension of the box is zero, so we add an epsilon and hope for the best
   bestfit <- optim(
-    par = c(hc, pe, lp, la, fanp, COP),
+    par = c(hc, prev, pirr, lp, la, fanp, COP),
     fn = fm,
     lower = c(if (fixed_parameters[1]) hc else 200,
-              if (fixed_parameters[2]) pe else -500,
-              if (fixed_parameters[3]) lp else 0,
-              if (fixed_parameters[4]) la else 0,
-              if (fixed_parameters[5]) fanp else 0,
-              if (fixed_parameters[6]) COP else 0.1),
+              if (fixed_parameters[2]) prev else -50,
+              if (fixed_parameters[3]) pirr else 0,
+              if (fixed_parameters[4]) lp else 0,
+              if (fixed_parameters[5]) la else 0,
+              if (fixed_parameters[6]) fanp else 0,
+              if (fixed_parameters[7]) COP else 0.1),
     upper = c(if (fixed_parameters[1]) hc + 1 else 400,
-              if (fixed_parameters[2]) pe + 0.1 else 32,
-              if (fixed_parameters[3]) lp + 0.1 else 15,
-              if (fixed_parameters[4]) la + 0.1 else 10,
-              if (fixed_parameters[5]) fanp + 10 else 600,
-              if (fixed_parameters[6]) COP + 0.1 else 6),
+              if (fixed_parameters[2]) prev + 0.1 else 50,
+              if (fixed_parameters[3]) pirr + 0.01 else 2,
+              if (fixed_parameters[4]) lp + 0.1 else 15,
+              if (fixed_parameters[5]) la + 0.1 else 10,
+              if (fixed_parameters[6]) fanp + 10 else 600,
+              if (fixed_parameters[7]) COP + 0.1 else 6),
     control = list(maxit = iter_count,
-                   ndeps = c(1, 0.1, 0.1, 0.1, 10, 0.1)),
+                   ndeps = c(1, 0.1, 0.01, 0.1, 0.1, 10, 0.1)),
     method = "L-BFGS-B")
 
   # remove epsilons from the best-fit of fixed parameters
   best_hc = ifelse (fixed_parameters[1], hc, bestfit$par[1])
-  best_pe = ifelse (fixed_parameters[2], pe, bestfit$par[2])
-  best_lp = ifelse (fixed_parameters[3], lp, bestfit$par[3])
-  best_la = ifelse (fixed_parameters[4], la, bestfit$par[4])
-  best_fanp = ifelse (fixed_parameters[5], fanp, bestfit$par[5])
-  best_COP = ifelse (fixed_parameters[6], COP, bestfit$par[6])
+  best_prev = ifelse (fixed_parameters[2], prev, bestfit$par[2])
+  best_pirr = ifelse (fixed_parameters[3], pirr, bestfit$par[3])
+  best_lp = ifelse (fixed_parameters[3], lp, bestfit$par[4])
+  best_la = ifelse (fixed_parameters[4], la, bestfit$par[5])
+  best_fanp = ifelse (fixed_parameters[5], fanp, bestfit$par[6])
+  best_COP = ifelse (fixed_parameters[6], COP, bestfit$par[7])
 
   # evaluate predict_temp(m) on the best_fit parameters
   # n.b. the fit will be degraded by any epsilon-shifts in sensitive params
   m <- predict_temp(
     m,
     heat_capacity = best_hc,
-    polarisation_energy = best_pe,
+    polarisation_rev = best_prev,
+    polarisation_irr = best_pirr,
     lambda_module_to_ambient = best_lp,
     lambda_module_AC_to_ambient = best_la,
     fan_power = best_fanp,
@@ -188,7 +201,8 @@ fit_model <- function(
     m <- predict_temp(
       orig_model,
       heat_capacity = best_hc,
-      polarisation_energy = best_pe,
+      polarisation_rev = best_prev,
+      polarisation_irr = best_pirr,
       lambda_module_to_ambient = best_lp,
       lambda_module_AC_to_ambient = best_la,
       fan_power = best_fanp,

@@ -44,11 +44,26 @@ thmodel_from_directory <- function(logfildir = "data-raw/eNV200noac50kWh",
 
   m <- new_thmodel()
   m$logdata <- arrange(t, date_time)
+  if ("motor_pwr_100w" %in% names(m$logdata))
+  { # csvs from an older LeafSpy version have "motor_pwr_100w" data
+    # we munge the logdata to conform with the current version
+    m$logdata <- m$logdata |>
+      rename(motor_pwr_w = motor_pwr_100w) |>
+      mutate(motor_pwr_w = motor_pwr_w * 100,
+             motor_temp = NA,
+             inverter_2_temp = NA,
+             inverter_4_temp = NA,
+             speed1 = NA,
+             speed2 = NA,
+             wiper_status = NA,
+             torque_nm = NA)
+  }
   m$filnm <- ""
   m$name <- ifelse(is.null(name), cname, name)
   m$model <- model
   m$capacity <- capacity
   m$fildir <- logfildir
+  m <- default_params(m)
   return(m)
 }
 

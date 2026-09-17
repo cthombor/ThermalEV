@@ -18,15 +18,17 @@
 #' @param tmodel a thmodel, or a csv from LeafSpy (default: log26Jan2026.csv)
 #' @param effective_pack_resistance in mOhms at 298.15K for SOC <= 70 percent
 #' @param packr85 in mOhms, effective pack resistance at SOC = 85 percent
-#' @param polarisation_energy in kJ/V, a reversible (entropic) heat
-#' @param polarisation_heat in J/(ΔI)², enthalpy of a polarisation shift
+#' @param polarisation_rev in kJ/V, reversible (entropic) heat
+#' @param polarisation_irr dimensionless, irreversible heat of polarisation
 #' @param lambda_module_to_ambient in hours
 #' @param lambda_module_AC_to_ambient in hours
 #' @param fan_power in Watts
 #' @param COP dimensionless
 #' @param arrhenius_resistance in K, temperature dependence of packr
 #' @param heat_capacity in kJ/K
+#' @param gids_reserve dimensionless, for estimation of SOC from GIDs
 #' @param ocv_tbl maps SOC onto OCV, either a 2-column tibble or an om_model
+#' @param use_est_SOC use a GIDs-derived SOC to index ocv_tbl
 #' @param iter_count may be increased for a more accurate prediction
 #' @param min_segment_length shorter sequences of samples are ignored
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
@@ -47,15 +49,17 @@
 predict_temp <- function(tmodel = NULL,
                          effective_pack_resistance = NA,
                          packr85 = NA,
-                         polarisation_energy = NA,
-                         polarisation_heat = NA,
+                         polarisation_rev = NA,
+                         polarisation_irr = NA,
                          lambda_module_to_ambient = NA,
                          lambda_module_AC_to_ambient = NA,
                          fan_power = NA,
                          COP = NA,
                          arrhenius_resistance = NA,
                          heat_capacity = NA,
+                         gids_reserve = NA,
                          ocv_tbl = NULL,
+                         use_est_SOC = T,
                          iter_count = 4,
                          min_segment_length = 20,
                          trace = 2,
@@ -140,8 +144,11 @@ predict_temp <- function(tmodel = NULL,
   if (!is.na(packr85)) {
     m$parameters[["packr85"]] <- packr85
   }
-  if (!is.na(polarisation_energy)) {
-    m$parameters[["polarisation_energy"]] <- polarisation_energy
+  if (!is.na(polarisation_rev)) {
+    m$parameters[["polarisation_rev"]] <- polarisation_rev
+  }
+  if (!is.na(polarisation_irr)) {
+    m$parameters[["polarisation_irr"]] <- polarisation_irr
   }
   if (!is.na(lambda_module_to_ambient)) {
     m$parameters[["lambda_module_to_ambient"]] <- lambda_module_to_ambient
@@ -161,23 +168,29 @@ predict_temp <- function(tmodel = NULL,
   if (!is.na(heat_capacity)) {
     m$parameters[["heat_capacity"]] <- heat_capacity
   }
+  if (!is.na(gids_reserve)) {
+    m$parameters[["gids_reserve"]] <- gids_reserve
+  }
 
   # read a full set of params
   effective_pack_resistance <- m$parameters[["effective_pack_resistance"]]
   packr85 <- m$parameters[["packr85"]]
-  polarisation_energy <- m$parameters[["polarisation_energy"]]
+  polarisation_rev <- m$parameters[["polarisation_rev"]]
+  polarisation_irr <- m$parameters[["polarisation_irr"]]
   lambda_module_to_ambient <- m$parameters[["lambda_module_to_ambient"]]
   lambda_module_AC_to_ambient <- m$parameters[["lambda_module_AC_to_ambient"]]
   fan_power <- m$parameters[["fan_power"]]
   COP <- m$parameters[["COP"]]
   arrhenius_resistance <- m$parameters[["arrhenius_resistance"]]
   heat_capacity <- m$parameters[["heat_capacity"]]
+  gids_reserve <- m$parameters[["gids_reserve"]]
   ocv_tbl <- m$parameters[["ocv_tbl"]]
 
   if (trace > 0) {
     cat(paste0("predict_temp:",
                " c = ", round(heat_capacity, 5),
-               ", pe = ", round(polarisation_energy, 5),
+               ", prev = ", round(polarisation_rev, 5),
+               ", pirr = ", round(polarisation_irr, 5),
                ", λp = ", round(lambda_module_to_ambient, 5),
                ", λa = ", round(lambda_module_AC_to_ambient, 5),
                ", fanp = ", round(fan_power, 5),
@@ -185,10 +198,10 @@ predict_temp <- function(tmodel = NULL,
                ", a = ", round(arrhenius_resistance, 5),
                ", r = ", round(effective_pack_resistance, 5),
                ", r85 = ", round(packr85, 5),
+               ", gr = ", gids_reserve,
                "; "))
   }
   if (trace > 1) {
-    # n.b. ocv_tbl is irrelevant to thermal predictions
     cat("ocv_tbl:\n")
     print(ocv_tbl, max_footer_lines = 0)
   }
@@ -199,108 +212,78 @@ predict_temp <- function(tmodel = NULL,
     # avoids a possible runaway negative COP in optim() if fan_power is low.
   }
 
-    #compute delta_t for runs of near-consecutive samples
-    logtibble <- logtibble |>
-      mutate(delta_t = date_time - dplyr::lag(date_time))
-    # n.b. dplyr's annoying redefinition of lag/lead is arguably intuitive, if
-    # you imagine lag() as an element-wise operation which retrieves the
-    # "previous" value in a vector, rather than taking a vector-centric view --
-    # in which a vector is shifted "backwards" (toward lower-indexed/earlier
-    # values) by a lag.  This is a direct -- and hazardous -- semantic conflict
-    # with stats::lag() and xts::lag().  dplyr also masks first() and last(),
-    # thereby creating additional hazards, unless you load the conflicted
-    # package before loading dplyr.
+  #compute delta_t for runs of near-consecutive samples
+  logtibble <- logtibble |>
+    mutate(delta_t = date_time - dplyr::lag(date_time))
+  # n.b. dplyr's annoying redefinition of lag/lead is arguably intuitive, if
+  # you imagine lag() as an element-wise operation which retrieves the
+  # "previous" value in a vector, rather than taking a vector-centric view --
+  # in which a vector is shifted "backwards" (toward lower-indexed/earlier
+  # values) by a lag.  This is a direct -- and hazardous -- semantic conflict
+  # with stats::lag() and xts::lag().  dplyr also masks first() and last(),
+  # thereby creating additional hazards, unless you load the conflicted
+  # package before loading dplyr.
 
-    # we make a rude estimate of the sampling interval over the whole file
-    # in order to count missing samples (with reasonable accuracy)
-    # TODO: review this code for adequacy on files with a non-constant
-    # sampling interval (which may be changed at any time by the LeafSpy user)
-    sampling_interval_est <- as.double(median(logtibble$delta_t, na.rm = TRUE))
-    # multiple missing samples will terminate a predictive segment
-    # n.b. time-stamps in the logs have a precision of 1 second
-    max_delta_t <- 2 * sampling_interval_est + 2
-    logtibble <- logtibble |>
-      mutate(delta_t = ifelse(delta_t > max_delta_t, NA, delta_t))
+  # we make a rude estimate of the sampling interval over the whole file
+  # in order to count missing samples (with reasonable accuracy)
+  # TODO: review this code for adequacy on files with a non-constant
+  # sampling interval (which may be changed at any time by the LeafSpy user)
+  sampling_interval_est <- as.double(median(logtibble$delta_t, na.rm = TRUE))
+  # multiple missing samples will terminate a predictive segment
+  # n.b. time-stamps in the logs have a precision of 1 second
+  max_delta_t <- 2 * sampling_interval_est + 2
+  logtibble <- logtibble |>
+    mutate(delta_t = ifelse(delta_t > max_delta_t, NA, delta_t))
 
-    # strangely, pack_t3_c is uniformly NA in all my logfiles.
-    logtibble <- logtibble |>
-      mutate(pack_avg_temp = rowMeans(across(c(
-        pack_t1_c, pack_t2_c, pack_t4_c
-      ))), .before = cp1)
+  # strangely, pack_t3_c is uniformly NA in all my logfiles.
+  logtibble <- logtibble |>
+    mutate(pack_avg_temp = rowMeans(across(c(
+      pack_t1_c, pack_t2_c, pack_t4_c
+    ))), .before = cp1)
 
-    # n.b. pack temps are unreliable when LeafSpy is still initialising,
-    # as it sometimes stutters on the previous temp readouts.  We rely heavily
-    # on the first temp readings in a predictive segment as the basis of
-    # our temperature predictions, so must delay starting the prediction
-    # until these readouts are stable.
-    # see e.g. eNV200ac24kWh_2025 2025-08-31 09:15:06
-    logtibble <- logtibble |>
-      mutate(
-        wonky_temps = !is.na(dplyr::lead(delta_t)) &
-          (abs((
-            pack_avg_temp - dplyr::lead(pack_avg_temp)
-          )) > 1),
-        delta_t = ifelse(wonky_temps, NA, delta_t)
-      )
-    wwonky <- which(logtibble$wonky_temps)
-    if (length(wwonky) > 0) {
-      warning(paste(
-        "Implausible temperature reading(s) at",
-        paste(lubridate::format_ISO8601(logtibble$date_time[wwonky]), collapse = ", "),
-        collapse = " "
-        )
-      )
-    }
-
-    # rate of heat gain (in K/s)
-    logtibble <- logtibble |>
-      mutate(
-        delta_K_delta_t =
-          (pack_avg_temp - dplyr::lag(pack_avg_temp)) / delta_t,
-        .before = cp1
-      )
-
-  # we now predict temperatures, using the parameters
-
-  # predicted Joule heating of cells (in W)
-  # n.b. the resistance is in mOhms
-  # n.b. variations in pack_amps have a nonlinear effect on heating
-
-  # An estimated slope $m$ in pack_amps, when integrated across the unit
-  # interval, adds $m^2 / 2$ to the estimated Joule heating.  We estimate this
-  # slope using a 2-point backward divided difference.
-
-  # We also compute a second-order divided difference, to investigate its
-  # correlation with the prediction error in our model
-  multilag <- function(x, lags = 1:2) {
-    names(lags) <- as.character(lags)
-    purrr::map_dfr(lags, dplyr::lag, x = x)
+  # n.b. pack temps are unreliable when LeafSpy is still initialising,
+  # as it sometimes stutters on the previous temp readouts.  We rely heavily
+  # on the first temp readings in a predictive segment as the basis of
+  # our temperature predictions, so must delay starting the prediction
+  # until these readouts are stable.
+  # see e.g. eNV200ac24kWh_2025 2025-08-31 09:15:06
+  logtibble <- logtibble |>
+    mutate(
+      wonky_temps = !is.na(dplyr::lead(delta_t)) &
+        (abs((
+          pack_avg_temp - dplyr::lead(pack_avg_temp)
+        )) > 1),
+      delta_t = ifelse(wonky_temps, NA, delta_t)
+    )
+  wwonky <- which(logtibble$wonky_temps)
+  if (length(wwonky) > 0) {
+    warning(paste(
+      "Implausible temperature reading(s) at",
+      paste(
+        lubridate::format_ISO8601(logtibble$date_time[wwonky]),
+        collapse = ", "
+      ),
+      collapse = " "
+    ))
   }
+
+  # rate of heat gain (in K/s)
   logtibble <- logtibble |>
     mutate(
-      across(pack_amps, multilag, .unpack = TRUE),
+      delta_K_delta_t =
+        (pack_avg_temp - dplyr::lag(pack_avg_temp)) / delta_t,
       .before = cp1
-    ) |>
-    rowwise() |>
-    mutate(
-      slope_amps = (pack_amps - pack_amps_1) / 2,
-      acc_amps = (pack_amps - (2 * pack_amps_1) + pack_amps_2) / 2,
-      .before = cp1
-    ) |>
-    ungroup()
-  logtibble <- logtibble |>
-    mutate(slope_amps = ifelse(is.na(slope_amps) | is.na(delta_t),
-                               0, slope_amps),
-           acc_amps = ifelse(is.na(acc_amps) | is.na(delta_t),
-                             0, acc_amps)
     )
 
-  # we perform an iterative approximation to the predicted temperatures, because
-  # of the significant shifts in effective pack resistance as a function of
-  # temperature. There are also some shifts in the vehicle's estimated %Hx, and
-  # we work from its value at the beginning of each prediction segment. The
-  # process which updates estimates of %Hx is obscure, but could presumably be
-  # black-box reverse-engineered with the aid of a simulation such as this one.
+  # The slope $m$ of pack_amps, when integrated across the unit interval, adds
+  # $m^2 / 2$ to the estimated Joule heating.  We estimate this slope using a
+  # 2-point backward divided difference.
+  logtibble <- logtibble |>
+    mutate(
+      slope_amps = (pack_amps - dplyr::lag(pack_amps)) / 2,
+      slope_amps = ifelse(is.na(slope_amps) | is.na(delta_t), 0, slope_amps),
+      .before = cp1
+    )
 
   w <- which(is.na(logtibble$delta_t)[-length(logtibble$delta_t)])
   nsegments <- length(w)
@@ -340,13 +323,42 @@ predict_temp <- function(tmodel = NULL,
   }
   # n.b. segnum 0 is discontinuous, and we don't predict in it
 
+  f_soc_to_ocv <- approxfun(m$parameters[["ocv_tbl"]],
+                            method = "linear",
+                            rule = 2)
+
   logtibble <- logtibble |>
     mutate(segnum = segnumv, .before = pack_avg_temp) |>
     group_by(segnum) |>
     mutate(
+      est_ssoc = gids_reserve * 0.080 / m$capacity +
+        0.9 * gids * 0.080 / (m$capacity * soh / 100),
+      # n.b. the reserve is of constant size in kWh (and in GIDs). The ratio of
+      # SOC to GIDs scales with soh, within the usable range of SOC (which thus
+      # varies with soh due to the constant-kWh reserve). Hurts my brain,
+      # especially with the dashboard computing SOC from GIDs using a different
+      # formula.  The dashboard SOC seems to have a zero-point that's pegged to
+      # turtling, rather than to a bricked pack.  See
+      # https://cthombor.wpcomstaging.com/50kwh-upgrade-to-
+      # my-e-nv200/50kwh-upgrade-to-my-24kwh-2014-nissan-e-nv200-part-3-
+      # estimation-of-usable-kwh/
+      ssoc = if (use_est_SOC) est_ssoc else (soc / 1e6),
+      # n.b. ssoc is scaled to (0.0, 1.0)
+      est_ocv = f_soc_to_ocv(ssoc),
+      # n.b. we estimate OCV from the kWh-based ssoc, rather than from an
+      # estimate of Ah remaining.  There may be hidden parameters in the OEM
+      # GID-estimator which allow it to be computed from the readout of a
+      # coulomb-counter; alternatively, it may have no coulomb-counter but
+      # instead it may be calculating a running-estimate of kWh consumption by
+      # numerically integrating the products of readouts from a voltmeter and an
+      # ammeter.
+
+      # TODO: Estimate %Ah-remaining, and use it to key the lookup table of OCV.
+
+      sampling_interval = mean(delta_t, na.rm = T),
       # the sampling interval is a parameter in LeafSpy which we estimate on a
       # per-segment basis.
-      sampling_interval = mean(delta_t, na.rm = T),
+
       pred_pack_avg_temp =
         if_else(segnum == 0, NA, dplyr::first(pack_avg_temp)),
       pred_hx =
@@ -360,29 +372,60 @@ predict_temp <- function(tmodel = NULL,
     ) |>
     ungroup()
 
-  for (iternum in 1:iter_count) {
+  if (trace == 2) {
+    logvalid <- logtibble$segnum != 0
+    GIDs <- logtibble$gids[logvalid]
+    SSOC <- logtibble$ssoc[logvalid]
+    `SOC/1e6` <- logtibble$soc[logvalid] / 1e6
+    plot(GIDs,SSOC - `SOC/1e6`, main = tmodel$name)
+    cat("SOH:\n")
+    print(summary(logtibble$soh[logvalid]))
+    cat("est_soc - LeafSpySOC:\n")
+    print(summary(SSOC - `SOC/1e6`))
+  }
 
-    # if iternum>1, we're using the previous prediction of temperature
-    # to estimate the effective pack resistance (after the first sample)
+  for (iternum in 1:iter_count) {
+    # we perform an iterative approximation to the predicted temperatures, because
+    # of the significant shifts in effective pack resistance as a function of
+    # temperature.
     #
-    # if iternum==1, we use the pack temperature at the beginning of a
-    # segment to estimate the effective pack resistance for the whole of
-    # the segment
+    # There are some shifts in the vehicle's estimated %Hx.  We work from
+    # its value at the beginning of each prediction segment. The process which
+    # updates estimates of %Hx is obscure, but could presumably be black-box
+    # reverse-engineered with the aid of a simulation such as this one.
+    #
+    # We don't attempt to estimate pack_volts, but instead focus on modelling
+    # the thermal behaviour of the pack from its timeseries of pack_amps and
+    # pack_volts, the active cooling power, and the ambient temperature.  Our
+    # e-NV200 traces do not include any from vehicles with a PTC pack heater, so
+    # we do not attempt to model the thermal behaviour in sub-zero ambients.
+    #
+    # if iternum>1, we're using the previous prediction of temperature to
+    # estimate the effective pack resistance (after the first sample).
+    #
+    # if iternum==1, we use the pack temperature at the beginning of a segment
+    # to estimate the effective pack resistance for the whole of the segment.
+    # The Arrhenius parameter (default: -3500) models a doubling of effective
+    # resistance for every 18-degree drop in temperature.  A typical segment in
+    # our simulations has less than a 10-degree shift in temperature, so the
+    # convergence is typically nearly complete after a couple of iterative
+    # updates to the temperature predictions of this simulation.
     for (i in seq(nsegments)[which(!segexclude)]) {
       logtibble$pred_pack_avg_temp[wstart[i]] <-
         logtibble$pack_avg_temp[wstart[i]]
     }
 
     sloper <- (packr85 - effective_pack_resistance) / 15
-    f_soc_to_v <- approxfun(m$parameters[["ocv_tbl"]],
-                            method = "linear",
-                            rule = 2)
+    # n.b. the pack is modelled as having a constant resistance for soc in (0%,
+    # 70%); then linearly increasing with value packr85 at soc = 85%.  This
+    # adjustment does not seem relevant as at v0.42; but we retain it "just in
+    # case" further refinements of our model indicate a significant
+    # SOC-dependency in the effective pack resistance.  Printouts of packr85 in
+    # the titles of plots are suppressed when its value is equal to that of
+    # effective_pack_resistance.
     logtibble <- logtibble |>
       group_by(segnum) |>
       mutate(
-        ssoc = soc / 1e6, # scale to (0.0, 1.0)
-        # pack is modelled as having a constant resistance for soc in (0%, 70%);
-        # then linearly increasing with value packr85 at soc = 85%
         eff_packr =
           ifelse(
             ssoc <= 0.70,
@@ -391,29 +434,80 @@ predict_temp <- function(tmodel = NULL,
           ) * exp(arrhenius_resistance *
                     (1 / 298.15 - 1 / (pred_pack_avg_temp + 273.15))) /
           (pred_hx / 100),
-        pred_pack_volts = f_soc_to_v(ssoc) - pack_amps * eff_packr / 1000,
+        pred_pack_volts = est_ocv - pack_amps * eff_packr / 1000,
+        # we compute a (rough) estimate of the pack voltage as a function of
+        # pack_amps, for use in fit_r_to_ocv().  n.b. this estimate is biased by
+        # ionic-transport delays at high C rates, and also at low C rates
+        # immediately after a high-C discharge (because cells require minutes to
+        # equilibrate their ionic concentrations after polarisation shifts).
+        # n.b. our resistance parameters are in mOhms, so we divide by 1000
+
         pred_Joule_heating =
           (pack_amps * pack_amps + 0.5 * slope_amps * slope_amps) *
-          eff_packr / 1000 * delta_t, # in Ws.  Note: r is in mOhms.
-        first_pv = dplyr::first(pack_volts), # for debugging
-        delta_v = if_else(segnum != 0,
-                          pack_volts -
-                            dplyr::lag(pack_volts,
-                                       default = dplyr::first(pack_volts)),
-                          0.0), # to aid debugging searches for large delta_v
-        pred_polarisation_heating =
-          delta_v * polarisation_energy * 1000, # in Ws
+          eff_packr / 1000 * delta_t, # in Ws
+        # n.b. an accurate numerical integration of a quadratic function
+        # requires an estimation of the slope of its dependent variable. In the
+        # preamble to this loop, slope_amps was computed as a 2-point (backward)
+        # divided difference.
+
+        delta_v = pack_volts - dplyr::lag(pack_volts),
+        delta_v = if_else(is.na(delta_v) | segnum == 0, 0.0, delta_v),
+        pred_polarisation_heating_rev =
+          delta_v * polarisation_rev * 1000, # in Ws
+        # n.b. this is a reversible heat, causing the pack to heat somewhat
+        # less when discharging at a given current than when charging at the
+        # same rate.
+
+        pred_polarisation_heating_irrev = pack_amps *
+          (est_ocv - pack_volts) * polarisation_irr * delta_t, # in Ws
+        # n.b. The irreversible heat of polarisation is always positive. When
+        # charging, the overvoltage is positive and pack_amps is negative; when
+        # discharging, the overvoltage is negative and pack_amps is positive.
+        # Accordingly, we use the additive inverse of the estimated overvoltage
+        # = (pack_volts - est_ocv) when estimating the heating in the formula
+        # above. However the overvoltage while charging may be estimated as a
+        # negative value, primarily due to inaccuracies in est_ocv, and also due
+        # to a delayed response of pack_volts to a change in pack_amps.
+
+        # TODO: consider revising est_ocv() so that it raises its estimate of
+        # OCV(SOC), if necessary to avoid cases where the battery is observed
+        # sourcing power at a voltage below its (currently-estimated) OCV,
+        # except perhaps within a few minutes of a sign-shift in pack_amps.
+
+        # TODO: consider estimating pack_voltage, rather than relying on
+        # LeafSpy-traced voltages when estimating thermal behaviour.  But!
+        # Additional parameters would be required -- at least two for Tafel's
+        # equation, plus two more if a BV model is required to attain adequate
+        # accuracy.  And that's just for the steady-state.  I doubt my dataset
+        # is diverse enough to support such a complex modelling exercise, even
+        # if I had the energy & motivation to do it.)
+
+        # TODO: consider using Tafel's equation to estimate polarisation_irrev.
+        # At present, est_ocv() uses an ohmic model, with the
+        # effective_pack_resistance being its parameter.
+
+        # TODO: consider adding yet-another time-constant to the model, so that
+        # it is somewhat more accurate in its predictions of pack voltage when
+        # pack_amps is highly variable. Equilibration of the ionic concentration
+        # near cell electrodes, and of the temperature of the electrolyte, may
+        # have time constants of a couple of minutes.
+
         cooling_power = 50 * est_pwr_a_c_50w - fan_power,
         cooling_power = ifelse(cooling_power < 0, 0, cooling_power),
         heat_pump_cooling = ifelse(
           charge_mode == 0,
           0, # AC is cooling the cabin
           COP * cooling_power * delta_t # AC is cooling the battery
-        ),
+        ), # in Ws
+
         # predict per-sample delta-heating of pack (in temperature K)
-        # n.b. heat_capacity is in kJ/K
+        # n.b. heat_capacity is in kJ/K == kWs/K
+        # todo: consider adding a time-constant to delay the heating from
+        # irreversible polarisation. We apply it immediately below, but it is
+        # generated by ionic movement so has a time-constant of minutes.
         pred_heating = (pred_Joule_heating +
-                          pred_polarisation_heating -
+                          pred_polarisation_heating_rev +
+                          pred_polarisation_heating_irrev -
                           heat_pump_cooling
                         ) / (heat_capacity * 1000),
         .before = cp1
@@ -473,10 +567,10 @@ predict_temp <- function(tmodel = NULL,
                ifelse(is.na(pred_Joule_heating),
                       0.0,
                       pred_Joule_heating / 1000 / 3600)), # in kWh
-             pred_polarisation_heating_kWh = cumsum(
-               ifelse(is.na(pred_polarisation_heating),
+             pred_polarisation_heating_rev_kWh = cumsum(
+               ifelse(is.na(pred_polarisation_heating_rev),
                       0.0,
-                      pred_polarisation_heating / 1000 / 3600)), # in kWh
+                      pred_polarisation_heating_rev / 1000 / 3600)), # in kWh
              AC_energy_kWh = cumsum(
                ifelse(is.na(heat_pump_cooling),
                       0.0,

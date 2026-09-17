@@ -80,7 +80,7 @@ plot_fit <- function(m,
              charging_kW,
              discharge_kW,
              `AC power/100`) |>
-      as.xts()
+      xts::as.xts()
     pd |>
       plot(
         legend.loc = "top",
@@ -92,19 +92,27 @@ plot_fit <- function(m,
           m$name,
           ": r = ",
           format((m$parameters)[["effective_pack_resistance"]], digits = 3),
-          "\u2009mΩ, r85 = ", # n.b. unicode is a thin space
-          format((m$parameters)[["packr85"]], digits = 3),
-          "\u2009mΩ, p = ",
-          format((m$parameters)[["polarisation_energy"]], digits = 3),
-          "\u2009kJ/V, λp = ",
+          # n.b. U+2009 is a thin space
+          ifelse((m$parameters)[["packr85"]] !=
+                   (m$parameters)[["effective_pack_resistance"]],
+                 paste0("\u2009mΩ, packr85 = ",
+                        format((m$parameters)[["packr85"]], digits = 3),
+                        collapse = ""),
+                 ""
+          ),
+          "\u2009mΩ, pr = ",
+          format((m$parameters)[["polarisation_rev"]], digits = 3),
+          "\u2009kJ/V, pi = ",
+          format((m$parameters)[["polarisation_irr"]], digits = 3),
+          ", λp = ",
           format((m$parameters)[["lambda_module_to_ambient"]], digits = 3),
           "\u2009h, λa = ",
           format((m$parameters)[["lambda_module_AC_to_ambient"]], digits = 3),
           "\u2009h, fanp = ",
           format((m$parameters)[["fan_power"]], digits = 3),
-          "\u2009W, COP = ",
+          "\u2009W,\n     COP = ",
           format((m$parameters)[["COP"]], digits = 3),
-          ",\n     a = ",
+          ", a = ",
           format((m$parameters)[["arrhenius_resistance"]], digits = 3),
           ", c = ",
           format((m$parameters)[["heat_capacity"]], digits = 3),

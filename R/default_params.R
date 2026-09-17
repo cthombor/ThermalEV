@@ -66,6 +66,27 @@
 #' of the reversible heat of polarisation); but our best-fits suggest a
 #' heat capacity of approximately 250 kJ/K.
 #'
+#' 1 GID = 80 Wh, as confirmed experimentally in https://cthombor.
+#' wpcomstaging.com/50kwh-upgrade-to-my-e-nv200/50kwh-upgrade-to-my-
+#' 24kwh-2014-nissan-e-nv200-part-3-estimation-of-usable-kwh/.
+#' The dashboard-reported SOC is adjusted to have a 0-point when the
+#' pack has about 10% of its nominal capacity.  The LeafSpy-reported
+#' SOC has no allowance for the "reserve"; and the vehicle will
+#' show a "turtle" on the dashboard when the LeafSpy-reported SOC
+#' is approximately 10% of its maximum value.
+#' A cursory examination of plot_gids(eNV50kWh) reveals that the
+#' firmware for the BMS in this 50 kWh pack produces an estimate
+#' for SOC that is often quite inaccurate when the pack's SOC is between
+#' 1/3 and 1/2 of its nominal capacity.  The BMS in Alastair's 50 kWh
+#' pack might, or might not, have a similar issue given that there
+#' is such little diversity in the operating conditions of
+#' eNVa.50kWh.2025.  The OEM BMS in my 24kWh e-NV200 shows an excellent
+#' fit to SOC = 9.9 + 0.309 * GID / SOH, over the quite varied operating
+#' conditions of eNV24kWh. The BMS in my 24kWh Leaf shows an excellent
+#' fit to SOC = 11.2 + 0.299 GID / SOH over the operating
+#' conditions of Leaf24kWh_2019 (which had no SOC < 45).  These fits motivate
+#' my default value of 10 for gids_reserve.
+#'
 #' @param m a thmodel
 #' @param ot an ocv_tbl, estimated from voltage behaviour (est_ocv())
 #'
@@ -133,8 +154,10 @@ default_params <- function(m,
 
   m$parameters <- list(arrhenius_resistance = -3500,
                        heat_capacity = 230,
-                       polarisation_energy =
-                         ifelse(m$capacity == 24, 7, 11),
+                       polarisation_rev =
+                         ifelse(m$capacity == 24, 14, 22),
+                       polarisation_irr =
+                         ifelse(m$capacity == 24, 0.36, 0.16),
                        lambda_module_to_ambient =
                          ifelse(m$capacity == 24, 8.5, 8.5),
                        lambda_module_AC_to_ambient =
@@ -146,6 +169,8 @@ default_params <- function(m,
                          ifelse(m$capacity == 24, 180, 60),
                        packr85 =
                          ifelse(m$capacity == 24, 180, 60),
+                       gids_reserve =
+                         ifelse(m$capacity == 24, 36, 60),
                        ocv_tbl = ot
   )
   m$modified.last.time <- lubridate::now()

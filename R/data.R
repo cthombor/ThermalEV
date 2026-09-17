@@ -18,6 +18,10 @@
 #' @source {thmodel} R package.
 "eNV50kWh"
 
+#' Leaf24kWh: all my LeafSpy records from a 2013 24kWh Leaf
+#' @format A thmodel object
+"Leaf24kWh"
+
 #' ocv_tbl_50: a lookup tibble of SOC onto OCV, empirically derived for the
 #' 50kWh pack (with extremal values from the cell manufacturer's specs)
 #' @format 51 obs of 2 variables

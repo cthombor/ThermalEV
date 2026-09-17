@@ -57,7 +57,7 @@ plot_log <- function(m,
            'distance/100' = distance / 100,
            speed1s = smooth(speed1) / 100,
            'elv/10' = smooth(elv) / 10,
-           SOC = soc / 10000,
+           kWh_remaining = (gids - 10) * (hx / 100) * 0.08,
            temp = pack_avg_temp,
            t1 = pack_t1_c,
            t2 = pack_t2_c,
@@ -74,33 +74,33 @@ plot_log <- function(m,
              distance,
              speed1s,
              'elv/10',
-             SOC,
+             kWh_remaining,
              temp,
              'tdiff*10'
       ) |>
-      as.xts()
+      xts::as.xts()
   } else if (max(x$distance, na.rm = TRUE) < 1500) {
     x <- x |>
       select(date_time,
              'distance/10',
              speed1s,
              'elv/10',
-             SOC,
+             kWh_remaining,
              temp,
              'tdiff*10'
       ) |>
-      as.xts()
+      xts::as.xts()
   } else {
     x <- x |>
       select(date_time,
              'distance/100',
              speed1s,
              'elv/10',
-             SOC,
+             kWh_remaining,
              temp,
              'tdiff*10'
       ) |>
-      as.xts()
+      xts::as.xts()
   }
 
   #n.b. GPS signals are not always available

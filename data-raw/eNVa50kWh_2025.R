@@ -5,6 +5,8 @@
 eNVa50kWh_2025 <- thmodel_from_directory(
   logfildir = "data-raw/2025a50kWh",
   name = "eNVa.50kWh.2025",
-  capacity = 50) |> predict_temp()
+  capacity = 50) |> predict_temp(gids_reserve = 50)
+warning("
+        Using a 50-GID reserve when estimating LeafSpy-reported SOC from GIDs.")
 
 usethis::use_data(eNVa50kWh_2025, overwrite = TRUE)
