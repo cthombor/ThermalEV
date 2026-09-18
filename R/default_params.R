@@ -170,7 +170,7 @@ default_params <- function(m,
                        packr85 =
                          ifelse(m$capacity == 24, 180, 60),
                        gids_reserve =
-                         ifelse(m$capacity == 24, 36, 60),
+                         ifelse(m$capacity == 24, 40, 60),
                        ocv_tbl = ot
   )
   m$modified.last.time <- lubridate::now()

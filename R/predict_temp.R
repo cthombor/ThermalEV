@@ -331,30 +331,6 @@ predict_temp <- function(tmodel = NULL,
     mutate(segnum = segnumv, .before = pack_avg_temp) |>
     group_by(segnum) |>
     mutate(
-      est_ssoc = gids_reserve * 0.080 / m$capacity +
-        0.9 * gids * 0.080 / (m$capacity * soh / 100),
-      # n.b. the reserve is of constant size in kWh (and in GIDs). The ratio of
-      # SOC to GIDs scales with soh, within the usable range of SOC (which thus
-      # varies with soh due to the constant-kWh reserve). Hurts my brain,
-      # especially with the dashboard computing SOC from GIDs using a different
-      # formula.  The dashboard SOC seems to have a zero-point that's pegged to
-      # turtling, rather than to a bricked pack.  See
-      # https://cthombor.wpcomstaging.com/50kwh-upgrade-to-
-      # my-e-nv200/50kwh-upgrade-to-my-24kwh-2014-nissan-e-nv200-part-3-
-      # estimation-of-usable-kwh/
-      ssoc = if (use_est_SOC) est_ssoc else (soc / 1e6),
-      # n.b. ssoc is scaled to (0.0, 1.0)
-      est_ocv = f_soc_to_ocv(ssoc),
-      # n.b. we estimate OCV from the kWh-based ssoc, rather than from an
-      # estimate of Ah remaining.  There may be hidden parameters in the OEM
-      # GID-estimator which allow it to be computed from the readout of a
-      # coulomb-counter; alternatively, it may have no coulomb-counter but
-      # instead it may be calculating a running-estimate of kWh consumption by
-      # numerically integrating the products of readouts from a voltmeter and an
-      # ammeter.
-
-      # TODO: Estimate %Ah-remaining, and use it to key the lookup table of OCV.
-
       sampling_interval = mean(delta_t, na.rm = T),
       # the sampling interval is a parameter in LeafSpy which we estimate on a
       # per-segment basis.
@@ -372,10 +348,65 @@ predict_temp <- function(tmodel = NULL,
     ) |>
     ungroup()
 
+  kWh_reserve <- gids_reserve * 0.080
+  SOC_reserve <- kWh_reserve / m$capacity
+  SOC_usable <- 1 - SOC_reserve
+  logtibble <- logtibble |>
+    mutate(
+      est_ssoc = SOC_reserve +
+        SOC_usable * gids * 0.080 / (m$capacity * soh / 100),
+      # n.b. the reserve is of constant size in kWh (and in GIDs). The ratio of
+      # SOC to GIDs scales with soh, within the usable range of SOC.  In OEM
+      # firmware, the usable range of LeafSpy-reported SOC is 10% to 100%.
+      #
+      # Alistair's (early-rev) 50kWh BMS from VIVNE reports a SOC with a central
+      # tendency that would put its 10% point at approximately 2.4 kWh.  This is
+      # significantly less than a 10% reserve (= 30 GIDs on a 24kWh pack; 62.5
+      # GIDs on a 50kWh pack).
+      #
+      # Both of the VIVNE-supplied BMS apparently compute SOC from something
+      # other than (or in addition to) the GID, showing significant variances
+      # from the formula above (esp. at SOC < 0.50 on my BMS).
+      #
+      # The dashboard displays a SOC with a different scaling.  Possibly: the dreaded turtle
+      # displays on the dash when the LeafSpy-reported SOC would be at 15%,
+      # i.e. 48 GIDs on a 24kWh pack.
+      #
+      # It's a confusing situation, especially with the unexplained variance
+      # in SOC as reported from the VIVNE-supplied BMS firmware.
+      #
+      # See https://cthombor.wpcomstaging.com/50kwh-upgrade-to-
+      # my-e-nv200/50kwh-upgrade-to-my-24kwh-2014-nissan-e-nv200-part-3-
+      # estimation-of-usable-kwh/ for some data and discussion of GIDs,
+      # LeafSpy-reported SOC, and dashboard-displayed SOC.
+      #
+      # TODO: Form an accurate and unbiased estimate of the pack's OCV as a
+      # function of temperature and GIDs. Estimate an SOC from the cell
+      # manufacturer's indicative rate-charging and -discharging voltage/time
+      # curves.  Compare this estimated SOC with the one estimated here from
+      # GIDs.
+      ssoc = if (use_est_SOC)
+        est_ssoc
+      else
+        (soc / 1e6)
+      ,
+      # n.b. ssoc is scaled to (0.0, 1.0)
+      est_ocv = f_soc_to_ocv(ssoc),
+      .before = pack_avg_temp
+      # n.b. we estimate OCV from the kWh-based ssoc, rather than from an
+      # estimate of Ah remaining.  There may be hidden parameters in the OEM
+      # GID-estimator which allow it to be computed from the readout of a
+      # coulomb-counter; alternatively, it may have no coulomb-counter but
+      # instead it may be calculating a running-estimate of kWh consumption by
+      # numerically integrating the products of readouts from a voltmeter and an
+      # ammeter.
+
+      # TODO: Estimate %Ah-remaining, and use it to key the lookup table of OCV.
+    )
   if (trace == 2) {
     logvalid <- logtibble$segnum != 0
     GIDs <- logtibble$gids[logvalid]
-    SSOC <- logtibble$ssoc[logvalid]
+    SSOC <- logtibble$est_ssoc[logvalid]
     `SOC/1e6` <- logtibble$soc[logvalid] / 1e6
     plot(GIDs,SSOC - `SOC/1e6`, main = tmodel$name)
     cat("SOH:\n")
