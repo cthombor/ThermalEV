@@ -26,7 +26,7 @@
 #' @param COP dimensionless
 #' @param arrhenius_resistance in K, temperature dependence of packr
 #' @param heat_capacity in kJ/K
-#' @param gids_reserve dimensionless, for estimation of SOC from GIDs
+#' @param gids_reserve dimensionless, to emulate a LeafSpy-reported SOC
 #' @param ocv_tbl maps SOC onto OCV, either a 2-column tibble or an om_model
 #' @param use_est_SOC use a GIDs-derived SOC to index ocv_tbl
 #' @param iter_count may be increased for a more accurate prediction
@@ -353,27 +353,41 @@ predict_temp <- function(tmodel = NULL,
   SOC_usable <- 1 - SOC_reserve
   logtibble <- logtibble |>
     mutate(
+      est_soc = gids * 0.080 / (m$capacity * soh / 100),
+      # est_soc is a "pure" SOC with no reserve, so that my estimated-OCV tables
+      # are directly comparable to published results for cells (albeit with
+      # differences in exactly how the "capacity" is defined, and the use of the
+      # kWh-estimator GIDs rather than an Ah estimator -- which I haven't yet
+      # developed, and may never bother to develop)
       est_ssoc = SOC_reserve +
         SOC_usable * gids * 0.080 / (m$capacity * soh / 100),
-      # n.b. the reserve is of constant size in kWh (and in GIDs). The ratio of
-      # SOC to GIDs scales with soh, within the usable range of SOC.  In OEM
-      # firmware, the usable range of LeafSpy-reported SOC is 10% to 100%.
+      # est_ssoc is an attempt to mimic the computation of high values of SOC by
+      # the OEM BMS for the 24kWh Leaf and e-NV200.  The gids_reserve (the
+      # intercept of the straightline portion of the curve) is apparently of
+      # constant size, so that the kWh in "reserve" is unaffected by
+      # SOH.  There's still some LeafSpy-reported SOC "in the tank" when the
+      # turtling vehicle refuses to move.  Some corrections to the slope
+      # occur at values of SOC below 50%, quite possibly to make it track
+      # Ah-remaining rather than kWh-remaining.
+      #
+      # To add to the confusion, the initial slope of the SOC displayed on the
+      # dashboard, as well as its intercept "initial reserve", is different to
+      # the slope & intercept on the LeafSpy-reported SOC with an OEM BMS.  With
+      # my VIVNE-supplied BMS firmware, there's a quirky behaviour with massive
+      # "corrections" below 50% SOC.  Alistair's early-rev 50 kWh firmware
+      # apparently has a different method for computing SOC from GIDs.  It's a
+      # difficult puzzle in reverse engineering, and I can't see any point in
+      # trying to get to the bottom of it -- except to document cases where my
+      # 50kWh firmware is apparently causing a turtling when the pack's OCV is
+      # well above 340V and the GIDs are above what I would consider a prudent
+      # reserve.
       #
       # Alistair's (early-rev) 50kWh BMS from VIVNE reports a SOC with a central
-      # tendency that would put its 10% point at approximately 2.4 kWh.  This is
-      # significantly less than a 10% reserve (= 30 GIDs on a 24kWh pack; 62.5
-      # GIDs on a 50kWh pack).
-      #
-      # Both of the VIVNE-supplied BMS apparently compute SOC from something
-      # other than (or in addition to) the GID, showing significant variances
-      # from the formula above (esp. at SOC < 0.50 on my BMS).
-      #
-      # The dashboard displays a SOC with a different scaling.  Possibly: the dreaded turtle
-      # displays on the dash when the LeafSpy-reported SOC would be at 15%,
-      # i.e. 48 GIDs on a 24kWh pack.
-      #
-      # It's a confusing situation, especially with the unexplained variance
-      # in SOC as reported from the VIVNE-supplied BMS firmware.
+      # tendency that would put its reserve at 2.4 kWh.  This is significantly
+      # less than the 10% reserve (= 30 GIDs on a 24kWh pack) of the intercept
+      # of the straight-line estimation of SOC from GIDs on my 24kWh Leaf and
+      # e-NV200.  The straight-line estimation of high values of SOC from gids
+      # allows for a 10% reserve (62.5 GIDs) on my 50kWh pack.
       #
       # See https://cthombor.wpcomstaging.com/50kwh-upgrade-to-
       # my-e-nv200/50kwh-upgrade-to-my-24kwh-2014-nissan-e-nv200-part-3-
@@ -385,12 +399,9 @@ predict_temp <- function(tmodel = NULL,
       # manufacturer's indicative rate-charging and -discharging voltage/time
       # curves.  Compare this estimated SOC with the one estimated here from
       # GIDs.
-      ssoc = if (use_est_SOC)
-        est_ssoc
-      else
-        (soc / 1e6)
-      ,
-      # n.b. ssoc is scaled to (0.0, 1.0)
+      ssoc = if (use_est_SOC) est_soc else (soc / 1e6),
+      # n.b. I scale SOC to (0.0, 1.0).  I sometimes plot %SOC on a 0-100
+      # scale, and don't always bother to put the prefix %.
       est_ocv = f_soc_to_ocv(ssoc),
       .before = pack_avg_temp
       # n.b. we estimate OCV from the kWh-based ssoc, rather than from an

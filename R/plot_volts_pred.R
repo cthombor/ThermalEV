@@ -90,9 +90,7 @@ plot_volts_pred <- function(m,
   pd <- pd |>
     filter_out(singletons | wonky | missings | extreme_temps | high_amps)
 
-  if (nrow(pd) == 0) {
-    stop("No data to plot")
-  }
+  stopifnot(nrow(pd) > 0)
 
   min_Hx <- round(min(pd$hx), 0)
   max_Hx <- round(max(pd$hx), 0)

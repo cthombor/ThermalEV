@@ -1,15 +1,13 @@
-#' plot_soc_gid: plot a computed SOC and the reported SOC against gid
+#' plot_soc_gid: plot an estimated SOC or the LeafSpy-reported SOC against gid
 #'
 #' @param m a thmodel
-#' @param max_sgids if !is.null, gids at 100\% SOC and 100\% SOH, else estimated
-#' @param min_gids if !is.null, the (unscaled!) gids "in reserve" at 0\% SOC
 #' @param suppress_outliers if TRUE, don't plot the reported outliers
 #' @param from_date starting date/time for plotting & analysis
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
 #' @param to_idx ending index in thmodel, ignored if !is.null(to_date)
-#' @param min_soc_filter high-pass filter on soc (to examine non-linearity)
-#' @param max_soc_filter low-pass filter on soc (to examine non-linearity)
+#' @param min_soc high-pass filter on soc (to examine non-linearity)
+#' @param max_soc low-pass filter on soc (to examine non-linearity)
 #'
 #' @returns an Environment
 #' @export
@@ -18,15 +16,13 @@
 #' plot_soc_gid(eNV200ac24kWh_2025)
 #' plot_soc_gid(eNV200ac24kWh_2025, max_soc_filter = 25)
 plot_soc_gid <- function(m,
-                         max_gids = NULL,
-                         min_gids = NULL,
                          suppress_outliers = FALSE,
                          from_date = NULL,
                          to_date = NULL,
                          from_idx = NULL,
                          to_idx = NULL,
-                         min_soc_filter = NULL,
-                         max_soc_filter = NULL)
+                         min_soc = NULL,
+                         max_soc = NULL)
 {
   # The LeafSpy-reported SOC drops from 100% to 0%, linearly in gids,
   # with 0% at min_gid.  At 100% SOC, the pack's usable capacity is
@@ -73,15 +69,11 @@ plot_soc_gid <- function(m,
   # https://cthombor.wpcomstaging.com/50kwh-upgrade-to-my-e-nv200/50kwh-upgrade-to-my-24kwh-2014-nissan-e-nv200-part-3-estimation-of-usable-kwh/
 
   pd <- m$logdata |>
-    select(date_time, gids, soc, soh, pack_volts, a_hr, pack_amps,
-           pack_avg_temp) |>
+    select(date_time, gids, soc, soh) |>
     mutate(
       gids_scaled = gids / (soh / 100),
-      soc = soc / 1e4,
-      a_hr = a_hr / 1e4,
-      volts_scaled = pack_volts - 300
+      soc = soc / 1e6
     ) |>
-    mutate(volts_scaled = ifelse(volts_scaled < 0, NA, volts_scaled)) |>
     arrange(date_time)
 
   # curiously, xts insists on UTC for all stored time/date data. Our goal is to
@@ -111,46 +103,28 @@ plot_soc_gid <- function(m,
   }
   pd <- pd |> slice(from_idx:to_idx)
 
-  if (!is.null(max_soc_filter))
-    pd <- pd[(pd$soc <= max_soc_filter), ]
-  if (!is.null(min_soc_filter))
-    pd <- pd[(pd$soc >= min_soc_filter), ]
+  min_soc <- if (is.null(min_soc)) 0 else min_soc
+  max_soc <- if (is.null(max_soc)) 1 else max_soc
+  extreme_socs <- (pd$soc < min_soc) | (pd$soc > max_soc)
+  missings <- is.na(pd$soc) | is.na(pd$gids_scaled)
+  cat("Filtering out",
+      sum(missings, na.rm = TRUE), "incomplete records, and",
+      sum(extreme_socs, na.rm = TRUE), "extreme-soc records\n")
+  pd <- pd |>
+    filter_out(extreme_socs | missings)
 
   stopifnot(nrow(pd) > 0)
 
-  # The mapping of gid onto SOC is nonlinear in SOH, but its variance is small
-  # unless the pack is under heavy high-temperature load or is nearly turtled
-  # (in which case the SOH may vary significantly, as it is updated by the BMS).
-  # We warn in such cases.
-  median_soh <- median(pd$soh, na.rm = TRUE)
   max_soh <- max(pd$soh, na.rm = TRUE)
   min_soh <- min(pd$soh, na.rm = TRUE)
-  if (max_soh - min_soh > 5) {
-    warning(paste0("SOH varies by more than 5 points, from ",
-                   min_soh, "% to ", max_soh, "%"))
-  }
 
-  if (is.null(max_gids)) { # regression
-    mod <- lm(pd$soc ~ pd$gids_scaled)
-    min_s <- mod$coefficients["(Intercept)"]
-    slope_s <- mod$coefficients["pd$gids_scaled"]
-    min_g <- - (median_soh / 100) * min_s / slope_s
-    max_sg <- (min_g + (median_soh / 100) * (100 / slope_s)) /
-      (median_soh / 100)
-  } else { # compute from args
-    # note that min_g is scaled, to maintain a reserve of constant size
-    #   min_g <- min_gids / (median_soh / 100)
-    #   max_g <- max_gids / (median_soh / 100)
-    min_g <- min_gids
-    max_sg <- max_sgids
-    slope_s <- 100 / (max_sgids / (median_soh / 100) - min_g)
-    min_s <- min_g * slope_s / (median_soh / 100)
-  }
+  mod <- lm(pd$soc ~ pd$gids_scaled)
+  min_s <- mod$coefficients["(Intercept)"]
+  slope_s <- mod$coefficients["pd$gids_scaled"]
 
-  pd <- pd |> mutate(computed_soc = min_s +
-                       slope_s * gids / soh * 100)
-  ggplot(pd, aes(x = gids, y = soc)) +
-    labs(y = "LeafSpy SOC") +
+  pd <- pd |> mutate(computed_soc = min_s + slope_s * gids)
+  ggplot(pd, aes(x = gids_scaled, y = soc)) +
+    labs(y = "LeafSpy SOC", x = "GIDS / SOH") +
     geom_point() +
     labs(
       title = paste0(
@@ -159,28 +133,27 @@ plot_soc_gid <- function(m,
         from_idx,
         " to #",
         to_idx,
-        ifelse(!is.null(min_soc_filter),
-               paste0("; SOC ≥ ", min_soc_filter),
-               ""),
-        ifelse(!is.null(max_soc_filter),
-               paste0("; SOC ≤ ", max_soc_filter),
-               "")
-      ),
-      subtitle = paste0(
-        ifelse(is.null(max_gids),
-               "Best-fit SOC = ",
-               "Computed SOC = "),
-        round(min_s, 1),
-        " + ",
-        round(slope_s, 3),
-        " * gids / SOH; min_gids = ",
-        round(min_g, 1),
-        ", max_sgid = ",
-        round(max_sg, 1),
-        ", SOH ~ ",
-        round(median_soh, 0)
-      )
-    ) +
+        if (min_soc == 0)
+          ""
+        else
+          paste0(", ", min_soc, " ≤ SOC", ), if (max_soc == 1)
+            ""
+        else
+          if (min_soc == 0)
+            paste0(", SOC ≤ ", max_soc)
+        else
+          paste0(" ≤ ", max_soc),
+        ". SOH = ",
+        min_soh,
+        "% to ",
+        max_soh,
+        "%"),
+      subtitle = paste0("Best-fit SOC = ",
+                        round(min_s, 3),
+                        " + ",
+                        round(slope_s, 5),
+                        " * gids / SOH")
+      ) +
     geom_line(
       data = pd,
       colour = "red",

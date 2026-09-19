@@ -1,8 +1,7 @@
 .Rproj.user
 .Rhistory
 .RData
-.RDataTmp
-.RDataTmp1
+.RDataTmp*
 .httr-oauth
 .DS_Store
 .quarto
@@ -16,5 +15,4 @@
 /data/om*.rda
 /images
 .positai
-.RDataTmp2
-.RDataTmp3
+
