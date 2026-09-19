@@ -2,6 +2,7 @@
 
 eNV50kWh <- combine_thmodels(
   name = "eNV50kWh",
-  thmodels = list(eNV200noac50kWh, eNV200ac50kWh))
+  thmodels = list(eNV200noac50kWh, eNV200ac50kWh)) |>
+  predict_temp(eNV50kWh)
 
 usethis::use_data(eNV50kWh, overwrite = TRUE)

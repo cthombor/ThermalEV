@@ -3,7 +3,7 @@
 #' @param name # user-friendly name, used for titles of plots
 #' @param thmodels # provenance (a list of thmodels)
 #'
-#' @returns ocv_model, a named list
+#' @returns structure of class "ocv_model"
 #' @export
 #'
 #' @examples
@@ -47,7 +47,8 @@ new_ocv_model <-
       )
     om$ocv_tbl <- m$parameters$ocv_tbl
     om$logdata <- m$logdata |>
-      select(soc, pack_volts, pack_amps, pack_avg_temp, hx, soh, date_time) |>
+      select(soc, est_ssoc, gids, pack_volts, pack_amps,
+             pack_avg_temp, hx, soh, date_time) |>
       mutate(soc = soc / 1e6) # 0.0 to 1.0 scale
 
     if (length(thmodels) > 1) {
@@ -58,7 +59,8 @@ new_ocv_model <-
         warning("Incompatible data")
       }
       mld <- m$logdata |>
-        select(soc, pack_volts, pack_amps, pack_avg_temp, hx, soh, date_time) |>
+        select(soc, est_ssoc, gids, pack_volts, pack_amps,
+               pack_avg_temp, hx, soh, date_time) |>
         mutate(soc = soc / 1e6) # 0.0 to 1.0 scale
       om$logdata <- om$logdata |> rbind(mld) # quadratic runtime, ouch
       # Could be hack-optimised e.g. with pre-allocated lists, but that's more

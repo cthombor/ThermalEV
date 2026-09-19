@@ -9,6 +9,7 @@ eNV24kWh <- combine_thmodels(
     eNV200ac24kWh_2024,
     eNV200ac24kWh_2025mdy,
     eNV200ac24kWh_2025
-  ))
+  )) |>
+  predict_temp(eNV24kWh)
 
 usethis::use_data(eNV24kWh, overwrite = TRUE)

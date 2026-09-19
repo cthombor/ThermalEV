@@ -1,4 +1,4 @@
-#' est_ocv: refine an ocv_tbl, from errors in an om_model's voltage prediction
+#' est_ocv_from_est_soc: refine an ocv_tbl, using est_ssoc from predict_temp()
 #'
 #' Usage notes: the new ocv_tbl can be inserted into a thmodel using
 #' predict_temp, e.g.
@@ -6,7 +6,7 @@
 #' This should reduce the variance in the voltage predictions; but you may
 #' also find it helpful to adjust the resistances using fit_r_to_ocv() before
 #' running est_ocv(), e.g.
-#' om <- fit_r_to_ocv(eNV50kWh)
+#' om <- fit_r_to_ocv_from_gids(eNV50kWh)
 #'
 #' @param om an ocv_model, or a thmodel (for convenience)
 #' @param wonky_threshold in Volts, outlier criterion (default 50)
@@ -24,9 +24,9 @@
 #' @export
 #'
 #' @examples
-#' est_ocv(eNV50kWh)
-#' est_ocv(om_eNV50kWh)
-est_ocv <- function(om,
+#' est_ocv_from_est_soc(eNV50kWh)
+#' est_ocv_from_est_soc(om_eNV50kWh)
+est_ocv_from_est_soc <- function(om,
                     wonky_threshold = 50,
                     max_C = 0.4,
                     from_temp = NULL,
@@ -48,13 +48,10 @@ est_ocv <- function(om,
     mutate(pred_error_pack_volts = pred_pack_volts - pack_volts,
            ocv_estimate = pack_volts - pack_amps * eff_packr / 1000,
            delta_t = date_time - dplyr::lag(date_time)) |>
-    arrange(soc, ocv_estimate)
+    arrange(est_ssoc, ocv_estimate)
 
   wonky <- (ld$pred_error_pack_volts > wonky_threshold)
-  missings <- is.na(ld$ocv_estimate) | is.na(ld$soc)
-  if (show_gids) {
-    missings <- missings | is.na(ld$gids)
-  }
+  missings <- is.na(ld$ocv_estimate) | is.na(ld$est_ssoc)
   starts <- ld$delta_t >= 120 # gap of two minutes or more
   ends <- lead(starts)
   singletons <- starts & ends # unreliable readings
@@ -64,20 +61,20 @@ est_ocv <- function(om,
   extreme_temps <- (ld$pack_avg_temp < min_temp) | (ld$pack_avg_temp > max_temp)
   min_soc <- if (is.null(from_soc)) 0.0 else from_soc
   max_soc <- if (is.null(to_soc)) 1.0 else to_soc
-  extreme_socs <- (ld$soc < min_soc) | (ld$soc > max_soc)
+  extreme_est_socs <- (ld$est_ssoc < min_soc) | (ld$est_ssoc > max_soc)
 
   if (trace > 0) {
     cat("est_ocv: filtering out",
         sum(high_amps, na.rm = TRUE), "high-amp records,",
         sum(extreme_temps, na.rm = TRUE), "extreme-temp records,",
-        sum(extreme_socs, na.rm = TRUE), "extreme-soc records,",
+        sum(extreme_est_socs, na.rm = TRUE), "extreme-est-soc records,",
         sum(missings, na.rm = TRUE), "incomplete records,",
         sum(singletons, na.rm = TRUE), "singletons, and",
         sum(wonky, na.rm = TRUE), "wonky lines of data\n")
   }
   ld <- ld |> filter_out(high_amps |
                            extreme_temps |
-                           extreme_socs |
+                           extreme_est_socs |
                            missings | singletons | wonky)
   if (trace > 0) {
     cat(" total remaining records:", nrow(ld), "\n")
@@ -101,8 +98,8 @@ est_ocv <- function(om,
   }
 
   #enforce monotonicity in ocv table, using a least-squares fit
-  ir <- isoreg(x = ld$soc, y = ld$ocv_estimate)
-  if (trace > 1) plot(ir, xlab = "SOC", ylab = "OCV")
+  ir <- isoreg(x = ld$est_ssoc, y = ld$ocv_estimate)
+  if (trace > 1) plot(ir, xlab = "Estimated SOC", ylab = "OCV")
 
   # build new ocv_tbl, retaining extremal values from the current ocv_tbl
   newt <- tibble(SOC = ir$x[ir$iKnots],
@@ -240,57 +237,59 @@ est_ocv <- function(om,
       geom_line(data = newt3f, aes(x = SOC, y = OCV), colour = "green") +
       geom_line(data = newt4f, aes(x = SOC, y = OCV), colour = "blue") +
       if (show_gids)
-        geom_point(data = ld, aes(x = soc, y = pack_volts, colour = gids))
+        geom_point(data = ld, aes(
+          x = est_ssoc,
+          y = pack_volts,
+          colour = gids
+        ))
     else
       geom_point(data = ld, aes(
-        x = soc,
+        x = est_ssoc,
         y = pack_volts,
         colour = abs(pack_amps)
       ))
     if (methodology == "cir") {
       e <- e +
-        geom_line(data = newt5f,
-                  aes(x = SOC, y = OCV),
-                  colour = "violet")
+        geom_line(data = newt5f, aes(x = SOC, y = OCV), colour = "violet")
     }
+
     plot(e +
-           theme(palette.colour.continuous = "Okabe-Ito") +
-           labs(
-             title = paste0(
-               om$name,
-               ": ",
-               min_date,
-               " to ",
-               max_date,
-               ifelse(
-                 is.null(from_temp) && is.null(to_temp),
+      theme(palette.colour.continuous = "Okabe-Ito") +
+      labs(,
+        x = "Estimated SOC",
+        y = "Pack Volts",
+        title = paste0(
+          om$name,
+          ": ", min_date,
+          " to ", max_date,
+          ifelse(is.null(from_temp) && is.null(to_temp),
                  "",
                  paste0(
-                   ifelse(is.null(from_temp), ", temp", paste0(", ", from_temp, " ≤ temp")),
-                   ifelse(is.null(to_temp), "", paste0(" ≤ ", to_temp))
-                 )
-               ),
-               ifelse(
-                 is.null(from_soc) && is.null(to_soc),
+                   ifelse(is.null(from_temp),
+                          ", temp",
+                          paste0(", ", from_temp, " ≤ temp")),
+                   ifelse(is.null(to_temp),
+                          "",
+                          paste0(" ≤ ", to_temp))
+                 )),
+          ifelse(is.null(from_soc) && is.null(to_soc),
                  "",
                  paste0(
-                   ifelse(is.null(from_soc), ", soc", paste0(", ", from_soc, " ≤ soc")),
-                   ifelse(is.null(to_soc), "", paste0(" ≤ ", to_soc))
-                 )
-               ),
-               paste0(", C ≤ ", max_C),
-               ". Hx = (",
-               min_Hx,
-               ", ",
-               max_Hx,
-               ")",
-               ", SOH = (",
-               min_SOH,
-               ", ",
-               max_SOH,
-               ")"
-             )
-           ))
+                   ifelse(is.null(from_soc),
+                          ", soc",
+                          paste0(", ", from_soc, " ≤ soc")),
+                   ifelse(is.null(to_soc),
+                          "",
+                          paste0(" ≤ ", to_soc))
+                 )),
+          paste0(", C ≤ ", max_C),
+          ". Hx = (", min_Hx,
+          ", ", max_Hx, ")",
+          ", SOH = (", min_SOH,
+          ", ", max_SOH, ")"
+        )
+      )
+    )
   }
 
   om$ocv_tbl <- if (methodology == "isoreg") newt3 else
