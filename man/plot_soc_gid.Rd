@@ -2,25 +2,21 @@
 % Please edit documentation in R/plot_soc_gid.R
 \name{plot_soc_gid}
 \alias{plot_soc_gid}
-\title{plot_soc_gid: plot a computed SOC and the reported SOC against gid}
+\title{plot_soc_gid: plot an estimated SOC or the LeafSpy-reported SOC against gid}
 \usage{
 plot_soc_gid(
   m,
-  max_gids = NULL,
-  min_gids = NULL,
   suppress_outliers = FALSE,
   from_date = NULL,
   to_date = NULL,
   from_idx = NULL,
   to_idx = NULL,
-  min_soc_filter = NULL,
-  max_soc_filter = NULL
+  min_soc = NULL,
+  max_soc = NULL
 )
 }
 \arguments{
 \item{m}{a thmodel}
-
-\item{min_gids}{if !is.null, the (unscaled!) gids "in reserve" at 0\% SOC}
 
 \item{suppress_outliers}{if TRUE, don't plot the reported outliers}
 
@@ -32,17 +28,15 @@ plot_soc_gid(
 
 \item{to_idx}{ending index in thmodel, ignored if !is.null(to_date)}
 
-\item{min_soc_filter}{high-pass filter on soc (to examine non-linearity)}
+\item{min_soc}{high-pass filter on soc (to examine non-linearity)}
 
-\item{max_soc_filter}{low-pass filter on soc (to examine non-linearity)}
-
-\item{max_sgids}{if !is.null, gids at 100\% SOC and 100\% SOH, else estimated}
+\item{max_soc}{low-pass filter on soc (to examine non-linearity)}
 }
 \value{
 an Environment
 }
 \description{
-plot_soc_gid: plot a computed SOC and the reported SOC against gid
+plot_soc_gid: plot an estimated SOC or the LeafSpy-reported SOC against gid
 }
 \examples{
 plot_soc_gid(eNV200ac24kWh_2025)

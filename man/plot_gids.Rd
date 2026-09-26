@@ -2,16 +2,20 @@
 % Please edit documentation in R/plot_gids.R
 \name{plot_gids}
 \alias{plot_gids}
-\title{plot_gids: scatterplot of SOC and pack_volts v gids}
+\title{plot_gids: scatterplot of SOC (or est_soc or est_ssoc) v gids}
 \usage{
 plot_gids(
   m,
+  soc_type = "SOC",
   from_date = NULL,
   to_date = NULL,
   from_idx = NULL,
   to_idx = NULL,
   min_soc = NULL,
   max_soc = NULL,
+  from_temp = NULL,
+  to_temp = NULL,
+  show_volts = T,
   suppress_outliers = FALSE
 )
 }
@@ -30,13 +34,21 @@ plot_gids(
 
 \item{max_soc}{low-pass filter on soc (to examine non-linearity)}
 
+\item{from_temp}{lower limit of battery temps to be analysed}
+
+\item{to_temp}{upper limit of battery temps to be analysed}
+
 \item{suppress_outliers}{FALSE by default: outliers are not plotted}
+
+\item{soc_type:}{"SOC", "est_soc", "est_ssoc"}
+
+\item{show_volts:}{T colour-scale for volts, F for temps}
 }
 \value{
 an Environment
 }
 \description{
-plot_gids: scatterplot of SOC and pack_volts v gids
+plot_gids: scatterplot of SOC (or est_soc or est_ssoc) v gids
 }
 \examples{
 plot_gids(eNV200ac24kWh_2025)

@@ -94,8 +94,7 @@ plot_volts_pred_volts <- function(m,
 
   pd <- pd |> mutate(
     amperage = as_factor(round(pack_amps / 30, 0) * 30),
-    temps = as_factor(round(pack_avg_temp / 10, 0) * 10),
-    'SOC' = as_factor(round(nboxes*soc,0)/nboxes))
+    temps = as_factor(round(pack_avg_temp / 10, 0) * 10))
   suppressWarnings(
     pd <- pd |> mutate(
       temps = fct_recode(

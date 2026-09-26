@@ -4,12 +4,14 @@
 \alias{fit_r_to_ocv}
 \title{fit_r_to_ocv: uses optim() to find a best-fit pack resistance to an ocv_model}
 \usage{
-fit_r_to_ocv(om = new_ocv_model(), iter_count = 4, trace = 1)
+fit_r_to_ocv(om = NULL, iter_count = 4, fit_packr85 = F, trace = 1)
 }
 \arguments{
-\item{om}{an ocv_model}
+\item{om}{an ocv_model, or a thmodel (for convenience)}
 
 \item{iter_count}{controls convergence on predicted temps}
+
+\item{fit_packr85}{optimise packr85 separately from effective_pack_resistance}
 
 \item{trace}{0 for silent, 1 for minimal, 2 for verbose}
 
@@ -22,7 +24,7 @@ modified ocv_model, with best-fit resistive params
 fit_r_to_ocv: uses optim() to find a best-fit pack resistance to an ocv_model
 }
 \examples{
-om <- fit_r_to_ocv(new_ocv_model("eNV50kWh", list(eNV200ac50kWh, eNV200noac50kWh)))
+om <- fit_r_to_ocv(eNV50kWh)
 fom: local fcn, for use by optim()
 
 Side effect: updates ocv_model om in the calling environment

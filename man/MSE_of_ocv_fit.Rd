@@ -4,10 +4,10 @@
 \alias{MSE_of_ocv_fit}
 \title{MSE_of_ocv_fit: compute the mean squared error of the estimation}
 \usage{
-MSE_of_ocv_fit(om)
+MSE_of_ocv_fit(m)
 }
 \arguments{
-\item{om, }{an ocv_model}
+\item{m, }{an ocv_model or thmodel}
 }
 \value{
 double

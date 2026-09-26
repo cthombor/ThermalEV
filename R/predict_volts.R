@@ -1,12 +1,15 @@
-#' Predicts pack_volts from OCV(SOC), pack_amps, hx, pack_temperature, arr
+#' Predicts pack_volts from an SOC lookup in ocv_tbl, conditioned by pack_amps,
+#' hx, and pack_temperature.  Parameters include a polarisation "resistance" (in
+#' a Tafel model).
 #'
 #' @param om an ocv_model
-#' @param effective_pack_resistance in mOhms at 298.15K
-#' @param arrhenius_resistance in K
-#' @param packr85 in mOhms at 298.15K, at SOC = 0.85 (inflection at soc = 0.7)
+#' @param polarisation_irr in mOhms, polarisation response to small Δ pack_amps
+#' @param tafel_slope in volts/(amps⋅(ln amps)), high-C response to Δ pack_amps
+#' @param lambda_polarisation in s, decay of pack_volts response to Δ pack_amps
+#' @param arrhenius_tafel in K, Arrhenius coefficient for tafel_slope
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose
 #'
-#' @returns a ocv_model, with a pred_pack_volts column in its logdata
+#' @returns an ocv_model with prediction columns in its logdata
 #' @export
 #'
 #' @examples
@@ -14,8 +17,9 @@
 
 predict_volts <- function(om = NULL,
                         effective_pack_resistance = NA,
-                        arrhenius_resistance = NA,
                         packr85 = NA,
+                        polarisation_irr = NA,
+                        arrhenius_resistance = NA,
                         trace = 1) {
   stopifnot(!is.null(om))
   stopifnot(class(om) == "ocv_model")

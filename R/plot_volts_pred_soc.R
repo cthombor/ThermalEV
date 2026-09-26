@@ -1,4 +1,5 @@
-#' plot_volts_pred_volts: plot of prediction error in pack_volts by pack_volts
+#' plot_volts_pred_soc: plot of prediction error in pack_volts by a
+#' corrected soc
 #'
 #' @param m a thmodel or an ocv_model
 #' @param from_date starting date/time
@@ -9,14 +10,16 @@
 #' @param to_temp upper limit of battery temps to be analysed
 #' @param max_amps limiting amperage for plotted points
 #' @param wonky_threshold in Volts, outlier criterion (default 50)
+#' @param scatter TRUE for scatterplot, FALSE for box and whiskers
+#' @param nboxes controls the SOC precision of boxplots
 #' @param by_amps colours indicate pack_temp (F), pack_amps (T)
 #'
 #' @returns an Environment
 #' @export
 #'
 #' @examples
-#' plot_volts_pred_volts(predict_volts_tafel(eNV50kWh))
-plot_volts_pred_volts <- function(m,
+#' plot_volts_pred_soc(predict_volts_tafel(eNV50kWh))
+plot_volts_pred_soc <- function(m,
                             from_date = NULL,
                             to_date = NULL,
                             from_idx = NULL,
@@ -25,6 +28,8 @@ plot_volts_pred_volts <- function(m,
                             to_temp = NULL,
                             max_amps = NULL,
                             wonky_threshold = 50,
+                            nboxes = 20,
+                            scatter = FALSE,
                             by_amps = TRUE)
 {
   pd <- select(m$logdata,
@@ -110,14 +115,24 @@ plot_volts_pred_volts <- function(m,
                "[15, 25)\u2009°C" = "green",
                "[25, 35)\u2009°C" = "orange",
                "> 35\u2009°C" = "red")
-
-  e <- ggplot(pd, aes(x = pack_volts, y = pred_pack_volts_from_soc)) +
-    theme(palette.colour.continuous = "Okabe-Ito")
-  if (by_amps) {
-    e <- e + geom_point(aes(colour = pack_amps))
+  if (scatter) {
+    e <- ggplot(pd, aes(x=SOC, y=pred_pack_volts_from_soc - pack_volts)) +
+      theme(palette.colour.continuous = "Okabe-Ito")
+    if (by_amps) {
+      e <- e + geom_point(aes(colour = pack_amps))
+    } else {
+      e <- e + geom_point(aes(colour = pack_avg_temp))
+    }
   } else {
-    e <- e + geom_point(aes(colour = pack_avg_temp))
+    e <- ggplot(pd, aes(SOC, y=pred_pack_volts_from_soc - pack_volts))
+    if (by_amps) {
+      e <- e + geom_boxplot(aes(colour = amperage))
+    } else {
+      e <- e + geom_boxplot(aes(colour = temps)) +
+        scale_color_manual(values=mycolors)
+    }
   }
+
   e + labs(
     title =
       paste0(
@@ -143,22 +158,15 @@ plot_volts_pred_volts <- function(m,
         "ts = ", round(m$parameters$tafel_slope, 3), ", ",
         "λp = ", round(m$parameters$lambda_polarisation, 1), "\u2009s, ",
         "at = ", round(m$parameters$arrhenius_tafel, 0), ", ",
-        "r = ", round(m$parameters$effective_pack_resistance, 5), "\u2009mΩ, ",
-        ifelse(m$parameters$packr85 !=
-                 m$parameters$effective_pack_resistance,
-               paste0("packr85 = ",
-                      format(m$parameters$packr85, digits = 3),
-                      "\u2009mΩ, ",
-                      collapse = ""),
-               ""
-        ),
-        "a = ", format(m$parameters$arrhenius_resistance, digits = 3), ", ",
+        "so = ", m$parameters$soc_offset_corr, ", ",
+        "ss = ", m$parameters$soc_slope_corr, ", ",
         "Hx = (",
         min_Hx,
         ", ",
         max_Hx,
         ")"
-      )
+      ),
+    x = "LeafSpy SOC"
   )
 
 }

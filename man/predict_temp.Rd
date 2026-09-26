@@ -8,15 +8,18 @@ predict_temp(
   tmodel = NULL,
   effective_pack_resistance = NA,
   packr85 = NA,
-  polarisation_energy = NA,
-  polarisation_heat = NA,
+  polarisation_rev = NA,
+  polarisation_irr = NA,
+  lambda_polarisation = 120,
   lambda_module_to_ambient = NA,
   lambda_module_AC_to_ambient = NA,
   fan_power = NA,
   COP = NA,
   arrhenius_resistance = NA,
   heat_capacity = NA,
+  gids_reserve = NA,
   ocv_tbl = NULL,
+  use_est_SOC = T,
   iter_count = 4,
   min_segment_length = 20,
   trace = 2,
@@ -29,15 +32,17 @@ predict_temp(
 )
 }
 \arguments{
-\item{tmodel}{a thmodel, optional}
+\item{tmodel}{a thmodel, or a csv from LeafSpy (default: log26Jan2026.csv)}
 
 \item{effective_pack_resistance}{in mOhms at 298.15K for SOC <= 70 percent}
 
 \item{packr85}{in mOhms, effective pack resistance at SOC = 85 percent}
 
-\item{polarisation_energy}{in kJ/V, a reversible (entropic) heat}
+\item{polarisation_rev}{in kJ/V, reversible (entropic) heat}
 
-\item{polarisation_heat}{in J/(ΔI)², enthalpy of a polarisation shift}
+\item{polarisation_irr}{in mOhms, affects irreversible heat of polarisation}
+
+\item{lambda_polarisation}{in s, decay of pack_volts response to Δ pack_amps}
 
 \item{lambda_module_to_ambient}{in hours}
 
@@ -51,13 +56,17 @@ predict_temp(
 
 \item{heat_capacity}{in kJ/K}
 
+\item{gids_reserve}{dimensionless, to emulate a LeafSpy-reported SOC}
+
 \item{ocv_tbl}{maps SOC onto OCV, either a 2-column tibble or an om_model}
+
+\item{use_est_SOC}{use a GIDs-derived SOC to index ocv_tbl}
 
 \item{iter_count}{may be increased for a more accurate prediction}
 
 \item{min_segment_length}{shorter sequences of samples are ignored}
 
-\item{trace}{0 for silent, 1 for minimal, 2 for verbose}
+\item{trace}{0 for silent, 1 for minimal, 2 for verbose, 3 with a scatterplot}
 
 \item{logfilnm}{name of a csv logfile to be read, if is.null(tmodel)}
 

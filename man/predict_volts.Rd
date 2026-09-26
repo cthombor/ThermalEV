@@ -2,32 +2,39 @@
 % Please edit documentation in R/predict_volts.R
 \name{predict_volts}
 \alias{predict_volts}
-\title{Predicts pack_volts from OCV(SOC), pack_amps, hx, pack_temperature, arr}
+\title{Predicts pack_volts from an SOC lookup in ocv_tbl, conditioned by pack_amps,
+hx, and pack_temperature.  Parameters include a polarisation "resistance" (in
+a Tafel model).}
 \usage{
 predict_volts(
   om = NULL,
   effective_pack_resistance = NA,
-  arrhenius_resistance = NA,
   packr85 = NA,
+  polarisation_irr = NA,
+  arrhenius_resistance = NA,
   trace = 1
 )
 }
 \arguments{
 \item{om}{an ocv_model}
 
-\item{effective_pack_resistance}{in mOhms at 298.15K}
-
-\item{arrhenius_resistance}{in K}
-
-\item{packr85}{in mOhms at 298.15K, at SOC = 0.85 (inflection at soc = 0.7)}
+\item{polarisation_irr}{in mOhms, polarisation response to small Δ pack_amps}
 
 \item{trace}{0 for silent, 1 for minimal, 2 for verbose}
+
+\item{tafel_slope}{in volts/(amps⋅(ln amps)), high-C response to Δ pack_amps}
+
+\item{lambda_polarisation}{in s, decay of pack_volts response to Δ pack_amps}
+
+\item{arrhenius_tafel}{in K, Arrhenius coefficient for tafel_slope}
 }
 \value{
-a ocv_model, with a pred_pack_volts column in its logdata
+an ocv_model with prediction columns in its logdata
 }
 \description{
-Predicts pack_volts from OCV(SOC), pack_amps, hx, pack_temperature, arr
+Predicts pack_volts from an SOC lookup in ocv_tbl, conditioned by pack_amps,
+hx, and pack_temperature.  Parameters include a polarisation "resistance" (in
+a Tafel model).
 }
 \examples{
 om <- predict_volts(om_eNV50kWh)

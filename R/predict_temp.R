@@ -19,7 +19,8 @@
 #' @param effective_pack_resistance in mOhms at 298.15K for SOC <= 70 percent
 #' @param packr85 in mOhms, effective pack resistance at SOC = 85 percent
 #' @param polarisation_rev in kJ/V, reversible (entropic) heat
-#' @param polarisation_irr dimensionless, irreversible heat of polarisation
+#' @param polarisation_irr in mOhms, affects irreversible heat of polarisation
+#' @param lambda_polarisation in s, decay of pack_volts response to Δ pack_amps
 #' @param lambda_module_to_ambient in hours
 #' @param lambda_module_AC_to_ambient in hours
 #' @param fan_power in Watts
@@ -31,7 +32,7 @@
 #' @param use_est_SOC use a GIDs-derived SOC to index ocv_tbl
 #' @param iter_count may be increased for a more accurate prediction
 #' @param min_segment_length shorter sequences of samples are ignored
-#' @param trace 0 for silent, 1 for minimal, 2 for verbose
+#' @param trace 0 for silent, 1 for minimal, 2 for verbose, 3 with a scatterplot
 #' @param logfilnm name of a csv logfile to be read, if is.null(tmodel)
 #' @param logfildir directory in which the logfile is located
 #' @param from_date starting date/time for calculation of MSE
@@ -51,6 +52,7 @@ predict_temp <- function(tmodel = NULL,
                          packr85 = NA,
                          polarisation_rev = NA,
                          polarisation_irr = NA,
+                         lambda_polarisation = 120, # TODO: omit default
                          lambda_module_to_ambient = NA,
                          lambda_module_AC_to_ambient = NA,
                          fan_power = NA,
@@ -82,12 +84,21 @@ predict_temp <- function(tmodel = NULL,
   # of fit_model(), be used to refine an initial estimate of heat capacity and
   # all other non-resistive parameters in my model, based on a fixed estimate of
   # the pack's effective resistance. With these refined estimates, the pack
-  # voltage modelling of predict_volts() method can be used to refine the
-  # resistance model.  Sourcing om_eNV24kWh.R and om_eNV50kWh.R will produce two
-  # ocv_models (one for each size of pack), as required for the use of est_ocv()
-  # and the optimisation routine fit_r_to_ocv().  These methods return a refined
-  # ocv_model, notably including a revised ocv_table that maps the pack's SOC (as
-  # reported by LeafSpy) onto the pack's (estimated) open circuit voltage (OCV).
+  # voltage modelling of predict_volts() can be used to refine the resistance
+  # model.  om_eNV24kWh and om_eNV50kWh are memorialised ocv_models (one for
+  # each size of pack) to illustrate the process; and you can generate an
+  # ocv_model by passing a thmodel to est_ocv() or to fit_r_to_ocv().  These
+  # methods return a refined ocv_model, notably including a revised ocv_table
+  # that maps the pack's SOC (as reported by LeafSpy) onto the pack's
+  # (estimated) open circuit voltage (OCV).
+  #
+  # TODO: revise these comments if a future version of predict_temp() computes
+  # its own estimate of SOC from its estimate of OCV, rather than (as at v0.42)
+  # relying on the SOC estimates from the BMS to estimate OCV using the
+  # estimated parameters in a SOC-OCV lookup table.  In that future version,
+  # there should still be an SOC-OCV table, but we'll be indexing it by OCV
+  # to estimate an SOC.
+  #
   # The fit_r_to_ocv() method searches for better-fitting resistances to the
   # observed changes in pack voltage as a function of pack amperage, pack
   # temperature, SOC, and Hx. The fit_r_to_ocv() method also adjusts the
@@ -115,6 +126,10 @@ predict_temp <- function(tmodel = NULL,
   }
   logtibble <- m$logdata
 
+  # TODO: add lambda_polarisation and polarisation_resistance to thmodel
+  # parameters.  They are currently specified only in a call to predict_temp()
+  # and are not memorialised.
+
   # param values specified in the method call have precedence.
   if (!is.null(ocv_tbl)) {
     if ("ocv_model" %in% class(ocv_tbl)) {
@@ -123,68 +138,57 @@ predict_temp <- function(tmodel = NULL,
       # not specified in the call to predict_temp()
       if (is.na(effective_pack_resistance)) {
         effective_pack_resistance <-
-          om$parameters[["effective_pack_resistance"]]
+          om$parameters$effective_pack_resistance
       }
       if (is.na(packr85)) {
-        packr85 <- om$parameters[["packr85"]]
+        packr85 <- om$parameters$packr85
       }
       if (is.na(heat_capacity)) {
-        heat_capacity <- om$parameters[["heat_capacity"]]
+        heat_capacity <- om$parameters$heat_capacity
       }
       ocv_tbl <- om$ocv_tbl  # extract the ocv_tbl from this ocv_model
     }
     stopifnot(dim(ocv_tbl)[2] == 2) # sanity checks
     stopifnot(min(ocv_tbl[1]) >= 0.0)
     stopifnot(max(ocv_tbl[1]) <= 1.0)
-    m$parameters[["ocv_tbl"]] <- ocv_tbl # update the thmodel's params
+    m$parameters$ocv_tbl <- ocv_tbl # update the thmodel's params
   }
-  if (!is.na(effective_pack_resistance)) {
-    m$parameters[["effective_pack_resistance"]] <- effective_pack_resistance
-  }
-  if (!is.na(packr85)) {
-    m$parameters[["packr85"]] <- packr85
-  }
-  if (!is.na(polarisation_rev)) {
-    m$parameters[["polarisation_rev"]] <- polarisation_rev
-  }
-  if (!is.na(polarisation_irr)) {
-    m$parameters[["polarisation_irr"]] <- polarisation_irr
-  }
-  if (!is.na(lambda_module_to_ambient)) {
-    m$parameters[["lambda_module_to_ambient"]] <- lambda_module_to_ambient
-  }
-  if (!is.na(lambda_module_AC_to_ambient)) {
-    m$parameters[["lambda_module_AC_to_ambient"]] <- lambda_module_AC_to_ambient
-  }
-  if (!is.na(fan_power)) {
-    m$parameters[["fan_power"]] <- fan_power
-  }
-  if (!is.na(COP)) {
-    m$parameters[["COP"]] <- COP
-  }
-  if (!is.na(arrhenius_resistance)) {
-    m$parameters[["arrhenius_resistance"]] <- arrhenius_resistance
-  }
-  if (!is.na(heat_capacity)) {
-    m$parameters[["heat_capacity"]] <- heat_capacity
-  }
-  if (!is.na(gids_reserve)) {
-    m$parameters[["gids_reserve"]] <- gids_reserve
-  }
+  if (!is.na(effective_pack_resistance))
+    m$parameters$effective_pack_resistance <- effective_pack_resistance
+  if (!is.na(packr85))
+    m$parameters$packr85 <- packr85
+  if (!is.na(polarisation_rev))
+    m$parameters$polarisation_rev <- polarisation_rev
+  if (!is.na(polarisation_irr))
+    m$parameters$polarisation_irr <- polarisation_irr
+  if (!is.na(lambda_module_to_ambient))
+    m$parameters$lambda_module_to_ambient <- lambda_module_to_ambient
+  if (!is.na(lambda_module_AC_to_ambient))
+    m$parameters$lambda_module_AC_to_ambient <- lambda_module_AC_to_ambient
+  if (!is.na(fan_power))
+    m$parameters$fan_power <- fan_power
+  if (!is.na(COP))
+    m$parameters$COP <- COP
+  if (!is.na(arrhenius_resistance))
+    m$parameters$arrhenius_resistance <- arrhenius_resistance
+  if (!is.na(heat_capacity))
+    m$parameters$heat_capacity <- heat_capacity
+  if (!is.na(gids_reserve))
+    m$parameters$gids_reserve <- gids_reserve
 
   # read a full set of params
-  effective_pack_resistance <- m$parameters[["effective_pack_resistance"]]
-  packr85 <- m$parameters[["packr85"]]
-  polarisation_rev <- m$parameters[["polarisation_rev"]]
-  polarisation_irr <- m$parameters[["polarisation_irr"]]
-  lambda_module_to_ambient <- m$parameters[["lambda_module_to_ambient"]]
-  lambda_module_AC_to_ambient <- m$parameters[["lambda_module_AC_to_ambient"]]
-  fan_power <- m$parameters[["fan_power"]]
-  COP <- m$parameters[["COP"]]
-  arrhenius_resistance <- m$parameters[["arrhenius_resistance"]]
-  heat_capacity <- m$parameters[["heat_capacity"]]
-  gids_reserve <- m$parameters[["gids_reserve"]]
-  ocv_tbl <- m$parameters[["ocv_tbl"]]
+  effective_pack_resistance <- m$parameters$effective_pack_resistance
+  packr85 <- m$parameters$packr85
+  polarisation_rev <- m$parameters$polarisation_rev
+  polarisation_irr <- m$parameters$polarisation_irr
+  lambda_module_to_ambient <- m$parameters$lambda_module_to_ambient
+  lambda_module_AC_to_ambient <- m$parameters$lambda_module_AC_to_ambient
+  fan_power <- m$parameters$fan_power
+  COP <- m$parameters$COP
+  arrhenius_resistance <- m$parameters$arrhenius_resistance
+  heat_capacity <- m$parameters$heat_capacity
+  gids_reserve <- m$parameters$gids_reserve
+  ocv_tbl <- m$parameters$ocv_tbl
 
   if (trace > 0) {
     cat(paste0("predict_temp:",
@@ -224,13 +228,17 @@ predict_temp <- function(tmodel = NULL,
   # thereby creating additional hazards, unless you load the conflicted
   # package before loading dplyr.
 
-  # we make a rude estimate of the sampling interval over the whole file
+  # we make a rude estimate of the sampling interval over the whole thmodel
   # in order to count missing samples (with reasonable accuracy)
-  # TODO: review this code for adequacy on files with a non-constant
-  # sampling interval (which may be changed at any time by the LeafSpy user)
   sampling_interval_est <- as.double(median(logtibble$delta_t, na.rm = TRUE))
   # multiple missing samples will terminate a predictive segment
   # n.b. time-stamps in the logs have a precision of 1 second
+
+  # TODO: review this code for adequacy on thmodels with a non-constant sampling
+  # interval (which may be changed at any time by the LeafSpy user). In
+  # particular: the sampling interval was 5s in some of my recorded sessions,
+  # and the predictions on these sessions may be distorted by unreliable records
+  # which aren't detected by other heuristics.
   max_delta_t <- 2 * sampling_interval_est + 2
   logtibble <- logtibble |>
     mutate(delta_t = ifelse(delta_t > max_delta_t, NA, delta_t))
@@ -241,12 +249,12 @@ predict_temp <- function(tmodel = NULL,
       pack_t1_c, pack_t2_c, pack_t4_c
     ))), .before = cp1)
 
-  # n.b. pack temps are unreliable when LeafSpy is still initialising,
-  # as it sometimes stutters on the previous temp readouts.  We rely heavily
-  # on the first temp readings in a predictive segment as the basis of
-  # our temperature predictions, so must delay starting the prediction
-  # until these readouts are stable.
-  # see e.g. eNV200ac24kWh_2025 2025-08-31 09:15:06
+  # n.b. pack temps are unreliable when LeafSpy is still initialising, as it
+  # sometimes stutters on the previous temp readouts.  We rely heavily on the
+  # first temp readings in a predictive segment as the basis of our temperature
+  # predictions, so delay starting the prediction to make it more likely we're
+  # starting with a valid temperature reading. see e.g. eNV200ac24kWh_2025
+  # 2025-08-31 09:15:06
   logtibble <- logtibble |>
     mutate(
       wonky_temps = !is.na(dplyr::lead(delta_t)) &
@@ -276,8 +284,9 @@ predict_temp <- function(tmodel = NULL,
     )
 
   # The slope $m$ of pack_amps, when integrated across the unit interval, adds
-  # $m^2 / 2$ to the estimated Joule heating.  We estimate this slope using a
-  # 2-point backward divided difference.
+  # $(m^2 / 2)r$ to the estimated Joule heating.  It also adds to (or subtracts
+  # from) an exponentially-decaying estimate of the polarisation (in Coulombs).
+  # We estimate this slope using a 2-point backward divided difference.
   logtibble <- logtibble |>
     mutate(
       slope_amps = (pack_amps - dplyr::lag(pack_amps)) / 2,
@@ -321,7 +330,7 @@ predict_temp <- function(tmodel = NULL,
   for (i in seq(nsegments)[which(!segexclude)]) {
     segnumv[wstart[i]:wend[i]] = i
   }
-  # n.b. segnum 0 is discontinuous, and we don't predict in it
+  # n.b. segnum 0 is generally discontinuous, and we don't predict in it
 
   f_soc_to_ocv <- approxfun(m$parameters[["ocv_tbl"]],
                             method = "linear",
@@ -333,17 +342,24 @@ predict_temp <- function(tmodel = NULL,
     mutate(
       sampling_interval = mean(delta_t, na.rm = T),
       # the sampling interval is a parameter in LeafSpy which we estimate on a
-      # per-segment basis.
+      # per-segment basis.  delta_t has a 1-second granularity, so we use its
+      # mean rather than its median to gain some additional precision in its
+      # central tendency.
 
       pred_pack_avg_temp =
         if_else(segnum == 0, NA, dplyr::first(pack_avg_temp)),
       pred_hx =
         if_else(segnum == 0, NA, dplyr::first(hx)),
-      # n.b. these time constants are in hours
+      pred_polarisation_voltage =
+        if_else(segnum == 0, NA, 0),
       EMA_parameter_module_to_ambient =
-        min(1.0, sampling_interval / (lambda_module_to_ambient * 3600)),
+        min(1.0, sampling_interval /
+              (lambda_module_to_ambient * 3600)), # parameterised in hours
       EMA_parameter_module_AC_to_ambient =
-        min(1.0, sampling_interval / (lambda_module_AC_to_ambient * 3600)),
+        min(1.0, sampling_interval /
+              (lambda_module_AC_to_ambient * 3600)), # parameterised in hours
+      EMA_parameter_polarisation =
+        min(1.0, sampling_interval / lambda_polarisation),
       .before = pack_avg_temp
     ) |>
     ungroup()
@@ -356,9 +372,9 @@ predict_temp <- function(tmodel = NULL,
       est_soc = gids * 0.080 / (m$capacity * soh / 100),
       # est_soc is a "pure" SOC with no reserve, so that my estimated-OCV tables
       # are directly comparable to published results for cells (albeit with
-      # differences in exactly how the "capacity" is defined, and the use of the
-      # kWh-estimator GIDs rather than an Ah estimator -- which I haven't yet
-      # developed, and may never bother to develop)
+      # differences in exactly how the "capacity" is defined -- which may be
+      # relative to a 0.2C charge/discharge table in the OEM firmware for the
+      # LeafSpy BMS)
       est_ssoc = SOC_reserve +
         SOC_usable * gids * 0.080 / (m$capacity * soh / 100),
       # est_ssoc is an attempt to mimic the computation of high values of SOC by
@@ -399,27 +415,46 @@ predict_temp <- function(tmodel = NULL,
       # manufacturer's indicative rate-charging and -discharging voltage/time
       # curves.  Compare this estimated SOC with the one estimated here from
       # GIDs.
+
       ssoc = if (use_est_SOC) est_soc else (soc / 1e6),
       # n.b. I scale SOC to (0.0, 1.0).  I sometimes plot %SOC on a 0-100
-      # scale, and don't always bother to put the prefix %.
+      # scale, and rarely add a prefix % to disambiguate.
+
       est_ocv = f_soc_to_ocv(ssoc),
-      .before = pack_avg_temp
-      # n.b. we estimate OCV from the kWh-based ssoc, rather than from an
-      # estimate of Ah remaining.  There may be hidden parameters in the OEM
-      # GID-estimator which allow it to be computed from the readout of a
+      # n.b. This is an estimate of OCV from the kWh-based ssoc, rather than
+      # from an estimate of Ah remaining.  There may be hidden parameters in the
+      # OEM GID-estimator which allow it to be computed from the readout of a
       # coulomb-counter; alternatively, it may have no coulomb-counter but
       # instead it may be calculating a running-estimate of kWh consumption by
       # numerically integrating the products of readouts from a voltmeter and an
       # ammeter.
 
-      # TODO: Estimate %Ah-remaining, and use it to key the lookup table of OCV.
+      est_overvoltage = NA,
+      # n.b. this is an estimate derived from pack_amps, pack_volts, and the
+      # estimated pack temperature.  The SOC reported by the reflashed BMS of my
+      # 50kWh pack is quite inaccurate when below 0.5, so this is essentially
+      # a reverse-engineering of the SOC-estimation of the OEM BMS -- but
+      # without the scaling and offset which simulates having a GIDS reserve
+      # in the pack.
+
+      # TODO: when (if!) est_overvoltage is reliably estimated in some future
+      # version, use it rather than est_ocv in thermal estimations, and perhaps
+      # derive yet-another SOC estimate (from lookup of the cell-manufacturer's
+      # indicative charge/discharge curves at 0.2C and 25 °C) to analyse the
+      # inaccuracy, scaling, and offset of the LeafSpy-reported SOC in various
+      # versions of BMS firmware.
+
+      .before = pack_avg_temp
+
     )
-  if (trace == 2) {
+  if (trace > 1) {
     logvalid <- logtibble$segnum != 0
     GIDs <- logtibble$gids[logvalid]
     SSOC <- logtibble$est_ssoc[logvalid]
     `SOC/1e6` <- logtibble$soc[logvalid] / 1e6
-    plot(GIDs,SSOC - `SOC/1e6`, main = tmodel$name)
+    if (trace > 2) {
+      plot(GIDs,SSOC - `SOC/1e6`, main = tmodel$name)
+    }
     cat("SOH:\n")
     print(summary(logtibble$soh[logvalid]))
     cat("est_soc - LeafSpySOC:\n")
@@ -442,20 +477,18 @@ predict_temp <- function(tmodel = NULL,
     # e-NV200 traces do not include any from vehicles with a PTC pack heater, so
     # we do not attempt to model the thermal behaviour in sub-zero ambients.
     #
+    # if iternum==1, we use the pack temperature at the beginning of a segment
+    # to estimate the effective pack resistance for the whole of the segment.
+    #
     # if iternum>1, we're using the previous prediction of temperature to
     # estimate the effective pack resistance (after the first sample).
     #
-    # if iternum==1, we use the pack temperature at the beginning of a segment
-    # to estimate the effective pack resistance for the whole of the segment.
     # The Arrhenius parameter (default: -3500) models a doubling of effective
-    # resistance for every 18-degree drop in temperature.  A typical segment in
-    # our simulations has less than a 10-degree shift in temperature, so the
+    # resistance for every 18-degree drop in temperature.  Few if any segments
+    # in our simulations have more than an 18-degree shift in temperature. The
     # convergence is typically nearly complete after a couple of iterative
-    # updates to the temperature predictions of this simulation.
-    for (i in seq(nsegments)[which(!segexclude)]) {
-      logtibble$pred_pack_avg_temp[wstart[i]] <-
-        logtibble$pack_avg_temp[wstart[i]]
-    }
+    # updates to the temperature predictions, so we set iter_count to 4 by
+    # default.
 
     sloper <- (packr85 - effective_pack_resistance) / 15
     # n.b. the pack is modelled as having a constant resistance for soc in (0%,
@@ -465,6 +498,39 @@ predict_temp <- function(tmodel = NULL,
     # SOC-dependency in the effective pack resistance.  Printouts of packr85 in
     # the titles of plots are suppressed when its value is equal to that of
     # effective_pack_resistance.
+
+    for (i in seq(nsegments)[which(!segexclude)]) {
+      if (iternum > 1) { # for debugging
+        prev_pv <-
+          logtibble$pred_polarisation_voltage[wstart[i]:wend[i]]
+      }
+      pv <- rep(NA, wend[i] - wstart[i] + 1)
+      dv <- - logtibble$slope_amps[wstart[i]:wend[i]] *
+        polarisation_irr / 1000 # n.b. resistance is in mOhms
+      dt <- logtibble$delta_t[wstart[i]]
+      lambda <- logtibble$EMA_parameter_polarisation[wstart[i]]
+      pv <- stats::filter(
+        dv, # impulse voltage
+        filter = c(1 - lambda), # exponential decay
+        method = "recursive",
+        init = dv[1])
+      logtibble$pred_polarisation_voltage[wstart[i]:wend[i]] <- pv
+      logtibble$pred_polarisation_heating_irrev[wstart[i]:wend[i]] =
+        logtibble$pack_amps[wstart[i]:wend[i]] * pv * dt # in Ws
+      # n.b. this heating should never be negative.  However differing sampling
+      # times for pack_volts and pack_amps, and estimation errors in
+      # slope_amps, may cause it to be estimated as being negative. Adding
+      # a correction for an estimated second derivative of pack_amps may
+      # be helpful in improving accuracy, but then again pack_amps is so
+      # variable that a second derivative would be wildly inaccurate and any
+      # skew in its distribution might introduce a significant bias.
+    }
+    # TODO: estimate the Arrhenius parameter for a temperature-adjustment of
+    # polarisation_irr.  Until this adjustment is made, pv == pred_pv for
+    # iternum > 1.
+
+    # TODO: consider folding this untidy code into the mutate below
+
     logtibble <- logtibble |>
       group_by(segnum) |>
       mutate(
@@ -478,11 +544,16 @@ predict_temp <- function(tmodel = NULL,
           (pred_hx / 100),
         pred_pack_volts = est_ocv - pack_amps * eff_packr / 1000,
         # we compute a (rough) estimate of the pack voltage as a function of
-        # pack_amps, for use in fit_r_to_ocv().  n.b. this estimate is biased by
-        # ionic-transport delays at high C rates, and also at low C rates
-        # immediately after a high-C discharge (because cells require minutes to
-        # equilibrate their ionic concentrations after polarisation shifts).
-        # n.b. our resistance parameters are in mOhms, so we divide by 1000
+        # pack_amps, for use in fit_r_to_ocv().
+
+        # n.b. our resistance parameters are in mOhms, so we divide by 1000.
+
+        # n.b. this estimate of pack voltage is biased by ionic-transport delays
+        # at high C rates.
+
+        # TODO: refine this estimate using an overvoltage estimated from
+        # polarisation.  Cells require minutes to equilibrate their ionic
+        # concentrations after polarisation shifts.
 
         pred_Joule_heating =
           (pack_amps * pack_amps + 0.5 * slope_amps * slope_amps) *
@@ -493,15 +564,18 @@ predict_temp <- function(tmodel = NULL,
         # divided difference.
 
         delta_v = pack_volts - dplyr::lag(pack_volts),
-        delta_v = if_else(is.na(delta_v) | segnum == 0, 0.0, delta_v),
+        delta_v = if_else((is.na(delta_v) | segnum == 0),
+                               0.0,
+                               delta_v),
         pred_polarisation_heating_rev =
           delta_v * polarisation_rev * 1000, # in Ws
         # n.b. this is a reversible heat, causing the pack to heat somewhat
         # less when discharging at a given current than when charging at the
         # same rate.
 
-        pred_polarisation_heating_irrev = pack_amps *
-          (est_ocv - pack_volts) * polarisation_irr * delta_t, # in Ws
+ #       pred_polarisation_heating_irrev = pack_amps *
+ #         (est_ocv - pack_volts) * delta_t, # in Ws
+        # TODO: revise with a better estimate of the overvoltage
         # n.b. The irreversible heat of polarisation is always positive. When
         # charging, the overvoltage is positive and pack_amps is negative; when
         # discharging, the overvoltage is negative and pack_amps is positive.

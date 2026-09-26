@@ -103,7 +103,7 @@ default_params <- function(m,
 
   if (is.null(ot)) {
     ot = tibble(
-      SOC = c( # from cell spec sheet. N.b. soc may vary from Nissan's def
+      SOC = c( # from cell spec sheet. N.b. Nissan's soc is quite different
         0.000,
         0.005,
         0.012,
@@ -152,12 +152,12 @@ default_params <- function(m,
     )
   }
 
-  m$parameters <- list(arrhenius_resistance = -3500,
-                       heat_capacity = 230,
+  m$parameters <- list(arrhenius_resistance =
+                         ifelse(m$capacity == 24, -3500, -3500),
+                       heat_capacity =
+                         ifelse(m$capacity == 24, 210, 230),
                        polarisation_rev =
                          ifelse(m$capacity == 24, 14, 22),
-                       polarisation_irr =
-                         ifelse(m$capacity == 24, 0.36, 0.16),
                        lambda_module_to_ambient =
                          ifelse(m$capacity == 24, 8.5, 8.5),
                        lambda_module_AC_to_ambient =
@@ -169,8 +169,20 @@ default_params <- function(m,
                          ifelse(m$capacity == 24, 180, 60),
                        packr85 =
                          ifelse(m$capacity == 24, 180, 60),
+                       polarisation_irr =
+                         ifelse(m$capacity == 24, 22, 22),
+                       tafel_slope =
+                         ifelse(m$capacity == 24, 0.6, 0.6),
+                       lambda_polarisation =
+                         ifelse(m$capacity == 24, 122, 122),
+                       arrhenius_tafel =
+                         ifelse(m$capacity == 24, -3500, -3500),
                        gids_reserve =
                          ifelse(m$capacity == 24, 40, 62.5),
+                       soc_offset_corr =
+                         ifelse(m$capacity == 24, .14, .14),
+                       soc_slope_corr =
+                         ifelse(m$capacity == 24, .85, .85),
                        ocv_tbl = ot
   )
   m$modified.last.time <- lubridate::now()

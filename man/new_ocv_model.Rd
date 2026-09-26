@@ -12,7 +12,7 @@ new_ocv_model(name = "", thmodels = list())
 \item{thmodels}{# provenance (a list of thmodels)}
 }
 \value{
-ocv_model, a named list
+structure of class "ocv_model"
 }
 \description{
 new_ocv_model: S3 class constructor

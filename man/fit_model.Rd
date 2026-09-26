@@ -9,7 +9,8 @@ fit_model(
   m = NULL,
   arrhenius_resistance = NA,
   heat_capacity = NA,
-  polarisation_energy = NA,
+  polarisation_rev = NA,
+  polarisation_irr = NA,
   lambda_module_to_ambient = NA,
   lambda_module_AC_to_ambient = NA,
   fan_power = NA,
@@ -18,7 +19,7 @@ fit_model(
   packr85 = NA,
   iter_count = 4,
   min_segment_length = 20,
-  fixed_parameters = c(F, F, F, F, F, F),
+  fixed_parameters = c(F, F, F, F, F, F, F),
   trace = 1,
   from_date = NULL,
   to_date = NULL,
@@ -33,7 +34,9 @@ fit_model(
 
 \item{heat_capacity}{in kJ/K}
 
-\item{polarisation_energy}{in kJ/V}
+\item{polarisation_rev}{in kJ/V}
+
+\item{polarisation_irr}{dimensionless, irreversible heat of polarisation}
 
 \item{lambda_module_to_ambient}{in hours}
 

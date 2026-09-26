@@ -1,5 +1,5 @@
-#' plot_volts_ts: plot time-series of pack_volts and pack_volts_pred
-
+#' plot_volts_gids: scatterplot of pack_volts v scaled gids
+#'
 #' @param m a thmodel with predictions (requires m$pack_avg_temp)
 #' @param from_date starting date/time
 #' @param to_date ending date/time
@@ -14,11 +14,11 @@
 #' @export
 #'
 #' @examples
-#' plot_volts(eNV200ac24kWh_2025)
-#' plot_volts(eNV200ac24kWh_2025, max_sgids = 75)
-#' plot_volts(eNV200ac24kWh_2025, max_sgids = 75, temp_colours=FALSE)
-#' plot_volts(eNV200ac24kWh_2025, max_sgids = 75, temp_colours=TRUE)
-plot_volts <- function(m,
+#' plot_volts_gids(eNV200ac24kWh_2025)
+#' plot_volts_gids(eNV200ac24kWh_2025, max_sgids = 75)
+#' plot_volts_gids(eNV200ac24kWh_2025, max_sgids = 75, temp_colours=FALSE)
+#' plot_volts_gids(eNV200ac24kWh_2025, max_sgids = 75, temp_colours=TRUE)
+plot_volts_gids <- function(m,
                      from_date = NULL,
                      to_date = NULL,
                      from_idx = NULL,
@@ -49,11 +49,6 @@ plot_volts <- function(m,
   pd <- pd |>
     slice(from_idx:to_idx)
 
-  if (!is.null(max_sgids))
-    pd <- pd[(pd$gids_scaled <= max_sgids), ]
-  if (!is.null(min_sgids))
-    pd <- pd[(pd$gids_scaled >= min_sgids), ]
-
   missings <- is.na(pd$gids) |
     is.na(pd$soc) |
     is.na(pd$soh) |
@@ -64,13 +59,23 @@ plot_volts <- function(m,
     (pd$pack_volts == 0)
 # unreliable <- pd$segnum == 0
   wonky <- pd$pack_volts < 300
+  pd <- pd |>
+    slice(from_idx:to_idx) |>
+    mutate(
+      gids_scaled = gids / (soh / 100)
+    )
+  minsg <- if (is.null(min_sgids)) 0 else min_sgids
+  maxsg <- if (is.null(max_sgids)) pd$capacity / 0.08 else max_sgids
+  extreme_gids <- (pd$gids_scaled < min_sgids) | (pd$gids_scaled > max_sgids)
 
   cat("Filtering out",
 #     sum(unreliable, na.rm = TRUE), "unreliable records,",
+      sum(extreme_gids, na.rm = TRUE), "extreme-GID records,",
       sum(wonky, na.rm = TRUE), "wonky records, and",
       sum(missings, na.rm = TRUE), "incomplete records\n")
   pd <- pd |>
     filter_out(
+      extreme_gids |
 #     unreliable |
       wonky |
       missings)
