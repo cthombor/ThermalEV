@@ -12,7 +12,7 @@ plot_volts_ts(
   to_idx = NULL,
   min_sgids = NULL,
   max_sgids = NULL,
-  volts_per_cell = T,
+  volts_per_cell = F,
   scale_colours = 0
 )
 }

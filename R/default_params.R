@@ -155,24 +155,24 @@ default_params <- function(m,
   m$parameters <- list(arrhenius_resistance =
                          ifelse(m$capacity == 24, -3500, -3500),
                        heat_capacity =
-                         ifelse(m$capacity == 24, 210, 230),
-                       polarisation_rev =
-                         ifelse(m$capacity == 24, 14, 22),
+                         ifelse(m$capacity == 24, 210, 234),
+                       entropic_heat =
+                         ifelse(m$capacity == 24, 14, 12),
                        lambda_module_to_ambient =
-                         ifelse(m$capacity == 24, 8.5, 8.5),
+                         ifelse(m$capacity == 24, 7.5, 7.5),
                        lambda_module_AC_to_ambient =
-                         ifelse(m$model == "e-NV200", 1.6, 1.6),
+                         ifelse(m$model == "e-NV200", 1.14, 1.14),
                        fan_power =
                          ifelse(m$model == "e-NV200", 300, 0),
-                       COP = ifelse(m$model == "e-NV200", 1.8, 0),
+                       COP = ifelse(m$model == "e-NV200", 2.9, 0),
                        effective_pack_resistance =
                          ifelse(m$capacity == 24, 180, 60),
                        packr85 =
                          ifelse(m$capacity == 24, 180, 60),
                        polarisation_irr =
-                         ifelse(m$capacity == 24, 22, 22),
+                         ifelse(m$capacity == 24, 5.2, 5.2),
                        tafel_slope =
-                         ifelse(m$capacity == 24, 0.6, 0.6),
+                         ifelse(m$capacity == 24, 0.55, 0.55),
                        lambda_polarisation =
                          ifelse(m$capacity == 24, 122, 122),
                        arrhenius_tafel =

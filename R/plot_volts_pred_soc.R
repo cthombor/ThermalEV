@@ -6,7 +6,7 @@
 #' @param to_date ending date/time
 #' @param from_idx starting index in ocv_model, ignored if !is.null(from_date)
 #' @param to_idx ending index in ocv_model, ignored if !is.null(to_date)
-#' @param from_temp lower limit of battery temps to be analysed
+#' @param from_temp lower limit of battry temps to be analysed
 #' @param to_temp upper limit of battery temps to be analysed
 #' @param max_amps limiting amperage for plotted points
 #' @param wonky_threshold in Volts, outlier criterion (default 50)

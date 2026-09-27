@@ -8,9 +8,11 @@ predict_temp(
   tmodel = NULL,
   effective_pack_resistance = NA,
   packr85 = NA,
-  polarisation_rev = NA,
+  entropic_heat = NA,
   polarisation_irr = NA,
-  lambda_polarisation = 120,
+  tafel_slope = NA,
+  lambda_polarisation = NA,
+  arrhenius_tafel = NA,
   lambda_module_to_ambient = NA,
   lambda_module_AC_to_ambient = NA,
   fan_power = NA,
@@ -38,11 +40,15 @@ predict_temp(
 
 \item{packr85}{in mOhms, effective pack resistance at SOC = 85 percent}
 
-\item{polarisation_rev}{in kJ/V, reversible (entropic) heat}
+\item{entropic_heat}{in kJ/V, reversible (entropic) heat}
 
-\item{polarisation_irr}{in mOhms, affects irreversible heat of polarisation}
+\item{polarisation_irr}{in mOhms, baseline polarisation response}
 
-\item{lambda_polarisation}{in s, decay of pack_volts response to Δ pack_amps}
+\item{tafel_slope}{large-C polarisation response}
+
+\item{lambda_polarisation}{in s, decay rate of tafel polarisation}
+
+\item{arrhenius_tafel}{in K, Arrhenius coefficient for tafel_slope}
 
 \item{lambda_module_to_ambient}{in hours}
 

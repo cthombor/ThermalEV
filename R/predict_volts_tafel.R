@@ -1,3 +1,4 @@
+#' Deprecated.  Overvoltage predictions are now made in predict_temp().
 #' Predicts pack_volts from an SOC lookup in ocv_tbl, conditioned by pack_amps,
 #' hx, and pack_temperature.  Parameters include a polarisation "resistance" (in
 #' a Tafel model).

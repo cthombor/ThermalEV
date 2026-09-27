@@ -43,7 +43,7 @@ plot_volts_ts <- function(m,
     slice(from_idx:to_idx)
 
   missings <- is.na(pd$gids) |
-    is.na(pd$pred_pack_volts_from_soc)
+    is.na(pd$pred_pack_volts)
     is.na(pd$soc) |
     is.na(pd$pack_avg_temp) |
     is.na(pd$pack_amps) |
@@ -69,9 +69,9 @@ plot_volts_ts <- function(m,
         pack_volts - 350,
       #TODO: if volts_per_cell, change names so the legend isn't misleading
       'pred_volts - 350' = if (volts_per_cell)
-        (pred_pack_volts_from_soc - 350) / 96
+        (pred_pack_volts - 350) / 96
       else
-        pred_pack_volts_from_soc - 350,
+        pred_pack_volts - 350,
       amps = if (volts_per_cell)
         pack_amps / 96
       else

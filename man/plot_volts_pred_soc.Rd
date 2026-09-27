@@ -31,7 +31,7 @@ plot_volts_pred_soc(
 
 \item{to_idx}{ending index in ocv_model, ignored if !is.null(to_date)}
 
-\item{from_temp}{lower limit of battery temps to be analysed}
+\item{from_temp}{lower limit of battry temps to be analysed}
 
 \item{to_temp}{upper limit of battery temps to be analysed}
 
