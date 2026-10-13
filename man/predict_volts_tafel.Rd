@@ -2,7 +2,8 @@
 % Please edit documentation in R/predict_volts_tafel.R
 \name{predict_volts_tafel}
 \alias{predict_volts_tafel}
-\title{Predicts pack_volts from an SOC lookup in ocv_tbl, conditioned by pack_amps,
+\title{Deprecated.  Overvoltage predictions are now made in predict_temp().
+Predicts pack_volts from an SOC lookup in ocv_tbl, conditioned by pack_amps,
 hx, and pack_temperature.  Parameters include a polarisation "resistance" (in
 a Tafel model).}
 \usage{
@@ -39,6 +40,7 @@ predict_volts_tafel(
 a thmodel with volt-prediction columns in its logdata
 }
 \description{
+Deprecated.  Overvoltage predictions are now made in predict_temp().
 Predicts pack_volts from an SOC lookup in ocv_tbl, conditioned by pack_amps,
 hx, and pack_temperature.  Parameters include a polarisation "resistance" (in
 a Tafel model).

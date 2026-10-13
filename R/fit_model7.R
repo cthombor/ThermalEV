@@ -4,15 +4,14 @@
 #' @param m a thmodel
 #' @param heat_capacity in kJ/K
 #' @param entropic_heat in kJ/V
-#' @param polarisation_irr dimensionless, irreversible heat of polarisation
+#' @param polarisation_irr in mA, baseline polarisation current (Tafel)
 #' @param lambda_module_to_ambient in hours
 #' @param lambda_module_AC_to_ambient in hours
-#' @param fan_power in W
+#' @param fan_power in W, not optimised
 #' @param COP coefficient of heatpump performance, dimensionless
 #' @param effective_pack_resistance in mOhms, not optimised
-#' @param packr85 in mOhms, not optimised
 #' @param arrhenius_resistance in K, not optimised
-#' @param tafel_slope large-C polarisation response, not optimised
+#' @param tafel_slope large-C polarisation response
 #' @param lambda_polarisation in s, decay of tafel polarisation, not optimised
 #' @param arrhenius_tafel in K, Arrhenius coefficient for tafel, not optimised
 #' @param iter_count controls convergence on predicted temps
@@ -40,7 +39,6 @@ fit_model7 <- function(
     fan_power = NA,
     COP = NA,
     effective_pack_resistance = NA,
-    packr85 = NA,
     tafel_slope = NA,
     lambda_polarisation = NA,
     arrhenius_tafel = NA,
@@ -59,7 +57,7 @@ fit_model7 <- function(
 #'
 #' @param x parameter list
 #'
-  fm <- function(x = c(hc, eh, pirr, lp, la, fanp, COP)) {
+  fm <- function(x = c(hc, eh, pirr, lp, la, ts, COP)) {
     m <- predict_temp(
       m,
       heat_capacity = x[1],
@@ -67,12 +65,11 @@ fit_model7 <- function(
       polarisation_irr = x[3],
       lambda_module_to_ambient = x[4],
       lambda_module_AC_to_ambient = x[5],
-      fan_power = x[6],
+      tafel_slope= x[6],
       COP = x[7],
+      fan_power = fan_power,
       arrhenius_resistance = arr,
-      effective_pack_resistance = packr,
-      packr85 = r85,
-      tafel_slope = ts,
+      effective_pack_resistance = packr,,
       lambda_polarisation = lt,
       arrhenius_tafel = at,
       iter_count = iter_count,
@@ -94,8 +91,6 @@ fit_model7 <- function(
   # param values specified in the method call have precedence.
   if (!is.na(effective_pack_resistance))
     m$parameters$effective_pack_resistance <- effective_pack_resistance
-  if (!is.na(packr85))
-    m$parameters$packr85 <- packr85
   if (!is.na(entropic_heat))
     m$parameters$entropic_heat <- entropic_heat
   if (!is.na(polarisation_irr))
@@ -128,7 +123,6 @@ fit_model7 <- function(
   fanp <- m$parameters$fan_power
   COP <- m$parameters$COP
   packr <- m$parameters$effective_pack_resistance
-  r85 <- m$parameters$packr85
   pirr <- m$parameters$polarisation_irr
   ts <- m$parameters$tafel_slope
   lt <- m$parameters$lambda_polarisation # time constant for Tafel
@@ -159,24 +153,24 @@ fit_model7 <- function(
   # n.b. the box-constrained optimisation of L-BFGS-B throws an error if any
   # dimension of the box is zero, so we add an epsilon and hope for the best
   bestfit <- optim(
-    par = c(hc, eh, pirr, lp, la, fanp, COP),
+    par = c(hc, eh, pirr, lp, la, ts, COP),
     fn = fm,
     lower = c(if (fixed_parameters[1]) hc else 180,
               if (fixed_parameters[2]) eh else -50,
-              if (fixed_parameters[3]) pirr else 0,
+              if (fixed_parameters[3]) pirr -1000 else -5000,
               if (fixed_parameters[4]) lp else 0,
               if (fixed_parameters[5]) la else 0,
-              if (fixed_parameters[6]) fanp else 0,
+              if (fixed_parameters[6]) ts else 0,
               if (fixed_parameters[7]) COP else 0.1),
     upper = c(if (fixed_parameters[1]) hc + 50 else 400,
               if (fixed_parameters[2]) eh + 0.1 else 50,
-              if (fixed_parameters[3]) pirr + 100 else 500,
+              if (fixed_parameters[3]) pirr + 1000 else 1000,
               if (fixed_parameters[4]) lp + 0.1 else 15,
               if (fixed_parameters[5]) la + 0.1 else 10,
-              if (fixed_parameters[6]) fanp + 10 else 600,
+              if (fixed_parameters[6]) ts + 1 else 2,
               if (fixed_parameters[7]) COP + 0.1 else 6),
     control = list(maxit = iter_count,
-                   ndeps = c(1, 0.1, 1, 0.1, 0.1, 10, 0.1)),
+                   ndeps = c(1, 0.1, 100, 0.1, 0.1, .001, 0.1)),
     method = "L-BFGS-B")
 
   # remove epsilons from the best-fit of fixed parameters
@@ -185,7 +179,7 @@ fit_model7 <- function(
   best_pirr = ifelse (fixed_parameters[3], pirr, bestfit$par[3])
   best_lp = ifelse (fixed_parameters[4], lp, bestfit$par[4])
   best_la = ifelse (fixed_parameters[5], la, bestfit$par[5])
-  best_fanp = ifelse (fixed_parameters[6], fanp, bestfit$par[6])
+  best_ts = ifelse (fixed_parameters[6], ts, bestfit$par[6])
   best_COP = ifelse (fixed_parameters[7], COP, bestfit$par[7])
 
   # evaluate predict_temp(m) on the best_fit parameters
@@ -197,12 +191,11 @@ fit_model7 <- function(
     polarisation_irr = best_pirr,
     lambda_module_to_ambient = best_lp,
     lambda_module_AC_to_ambient = best_la,
-    fan_power = best_fanp,
+    fan_power = fanp,
     COP = best_COP,
     arrhenius_resistance = arr,
     effective_pack_resistance = packr,
-    packr85 = r85,
-    tafel_slope = ts,
+    tafel_slope = best_ts,
     lambda_polarisation = lt,
     arrhenius_tafel = at,
     iter_count = iter_count,
@@ -220,12 +213,11 @@ fit_model7 <- function(
       polarisation_irr = best_pirr,
       lambda_module_to_ambient = best_lp,
       lambda_module_AC_to_ambient = best_la,
-      fan_power = best_fanp,
+      fan_power = fanp,
       COP = best_COP,
       arrhenius_resistance = arr,
       effective_pack_resistance = packr,
-      packr85 = r85,
-      tafel_slope = ts,
+      tafel_slope = best_ts,
       lambda_polarisation = lt,
       arrhenius_tafel = at,
       iter_count = iter_count,

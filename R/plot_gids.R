@@ -1,7 +1,8 @@
-#' plot_gids: scatterplot of SOC (or est_soc or est_ssoc) v gids
+#' plot_gids: scatterplot of SOC, est_soc, est_ssoc, or est_soc_from_overvoltage
+#' v gids
 #'
 #' @param m a thmodel with temperature predictions
-#' @param soc_type: "SOC", "est_soc", "est_ssoc"
+#' @param soc_type: "SOC", "est_soc", "est_ssoc", "est_soc_from_overvoltage"
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
@@ -34,11 +35,13 @@ plot_gids <- function(m,
 )
 {
   pd <- m$logdata |>
-    select(date_time, gids, soc, est_soc, est_ssoc, soh, pack_volts,
-           a_hr, pack_amps, pack_avg_temp) |>
+    select(date_time, gids, soc, est_soc, est_ssoc, est_soc_from_overvoltage,
+           soh, pack_volts, a_hr, pack_amps, pack_avg_temp) |>
     mutate(gids_scaled = gids / (soh / 100),
            psoc = if (soc_type == "est_soc") est_soc else
-             if (soc_type == "est_ssoc") est_ssoc else soc / 1e6,
+             if (soc_type == "est_ssoc") est_ssoc else
+               if (soc_type == "est_soc_from_overvoltage")
+                 est_soc_from_overvoltage else soc / 1e6,
            a_hr = a_hr / 1e4,
            volts_scaled = pack_volts - 300) |>
     mutate(volts_scaled = ifelse(volts_scaled < 0, NA, volts_scaled)) |>

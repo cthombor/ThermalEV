@@ -1,6 +1,10 @@
 #' plot_volts_pred_volts: plot of prediction error in pack_volts by pack_volts
+#' Visual indication of an ocv_tbl which is appropriate for the type of SOC used
+#' to make the voltage prediction.  BMS-reported SOCs have a zero at
+#' pack-turtle.  Cell-manufacturer and researcher SOCs have a zero at the
+#' minimum operating voltage i.e a hazard of cell-bricking.
 #'
-#' @param m a thmodel or an ocv_model
+#' @param m a thmodel
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in ocv_model, ignored if !is.null(from_date)
@@ -32,13 +36,10 @@ plot_volts_pred_volts <- function(m,
                pred_pack_volts_from_soc,
                pack_volts,
                pack_amps,
-               soc,
+               ssoc,
                hx,
                pack_avg_temp
                )
-  if (class(m) == "thmodel") {
-    pd <- mutate(pd, soc = soc / 1e6)
-  }
 
   # curiously, xts insists on UTC for stored dates & times
   from_idx <- ifelse(is.null(from_date),
@@ -67,7 +68,7 @@ plot_volts_pred_volts <- function(m,
   ends <- lead(starts)
   singletons <- starts & ends # unreliable readings
   missings <- is.na(pd$pack_volts) |
-    is.na(pd$soc) |
+    is.na(pd$ssoc) |
     is.na(pd$pack_avg_temp) |
     is.na(pd$pack_amps) |
     is.na(pd$pred_pack_volts_from_soc)
@@ -95,7 +96,7 @@ plot_volts_pred_volts <- function(m,
   pd <- pd |> mutate(
     amperage = as_factor(round(pack_amps / 30, 0) * 30),
     temps = as_factor(round(pack_avg_temp / 10, 0) * 10),
-    'SOC' = as_factor(round(nboxes*soc,0)/nboxes))
+    'SOC' = as_factor(round(nboxes*ssoc,0)/nboxes))
   suppressWarnings(
     pd <- pd |> mutate(
       temps = fct_recode(

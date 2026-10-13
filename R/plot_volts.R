@@ -1,4 +1,4 @@
-#' plot_volts_ts: plot time-series of pack_volts and pack_volts_pred
+#' plot_volts_ts: plot time-series of pack_voltss and pack_volts_pred
 
 #' @param m a thmodel with predictions (requires m$pack_avg_temp)
 #' @param from_date starting date/time
@@ -25,7 +25,7 @@ plot_volts <- function(m,
                      to_idx = NULL,
                      min_sgids = NULL,
                      max_sgids = NULL,
-                     volts_per_cell = T,
+                     volts_per_cell = F,
                      scale_colours = 0)
 {
   pd <- m$logdata |> arrange(date_time)

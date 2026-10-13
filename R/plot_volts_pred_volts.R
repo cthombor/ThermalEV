@@ -1,4 +1,4 @@
-#' plot_volts_pred_volts: plot of prediction error in pack_volts by pack_volts
+#' plot_volts_pred_volts: plot of pred_pack_volts_from_soc by pack_volts
 #'
 #' @param m a thmodel or an ocv_model
 #' @param from_date starting date/time
@@ -25,6 +25,7 @@ plot_volts_pred_volts <- function(m,
                             to_temp = NULL,
                             max_amps = NULL,
                             wonky_threshold = 50,
+                            plot_ocv = F,
                             by_amps = TRUE)
 {
   pd <- select(m$logdata,
@@ -63,6 +64,7 @@ plot_volts_pred_volts <- function(m,
            delta_t = date_time - dplyr::lag(date_time))
 
   wonky <- (pd$pred_error_pack_volts > wonky_threshold)
+  # filters a wild outlier which corrupts the plot's y-axis upper limit
   starts <- pd$delta_t > 120
   ends <- lead(starts)
   singletons <- starts & ends # unreliable readings
@@ -110,7 +112,8 @@ plot_volts_pred_volts <- function(m,
                "[25, 35)\u2009°C" = "orange",
                "> 35\u2009°C" = "red")
 
-  e <- ggplot(pd, aes(x = pack_volts, y = pred_pack_volts_from_soc)) +
+  e <- ggplot(pd, aes(x = pack_volts,
+                      y = pred_pack_volts_from_soc)) +
     theme(palette.colour.continuous = "Okabe-Ito")
   if (by_amps) {
     e <- e + geom_point(aes(colour = pack_amps))

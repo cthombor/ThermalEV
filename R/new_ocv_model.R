@@ -1,4 +1,4 @@
-#' new_ocv_model: S3 class constructor
+#' new_ocv_model: S3 class constructor (deprecated)
 #'
 #' @param name # user-friendly name, used for titles of plots
 #' @param thmodels # provenance (a list of thmodels)

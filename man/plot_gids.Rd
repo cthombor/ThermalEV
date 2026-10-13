@@ -2,7 +2,8 @@
 % Please edit documentation in R/plot_gids.R
 \name{plot_gids}
 \alias{plot_gids}
-\title{plot_gids: scatterplot of SOC (or est_soc or est_ssoc) v gids}
+\title{plot_gids: scatterplot of SOC, est_soc, est_ssoc, or est_soc_from_overvoltage
+v gids}
 \usage{
 plot_gids(
   m,
@@ -40,7 +41,7 @@ plot_gids(
 
 \item{suppress_outliers}{FALSE by default: outliers are not plotted}
 
-\item{soc_type:}{"SOC", "est_soc", "est_ssoc"}
+\item{soc_type:}{"SOC", "est_soc", "est_ssoc", "est_soc_from_overvoltage"}
 
 \item{show_volts:}{T colour-scale for volts, F for temps}
 }
@@ -48,7 +49,8 @@ plot_gids(
 an Environment
 }
 \description{
-plot_gids: scatterplot of SOC (or est_soc or est_ssoc) v gids
+plot_gids: scatterplot of SOC, est_soc, est_ssoc, or est_soc_from_overvoltage
+v gids
 }
 \examples{
 plot_gids(eNV200ac24kWh_2025)

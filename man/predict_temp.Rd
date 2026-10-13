@@ -7,7 +7,6 @@
 predict_temp(
   tmodel = NULL,
   effective_pack_resistance = NA,
-  packr85 = NA,
   entropic_heat = NA,
   polarisation_irr = NA,
   tafel_slope = NA,
@@ -21,7 +20,6 @@ predict_temp(
   heat_capacity = NA,
   gids_reserve = NA,
   ocv_tbl = NULL,
-  use_est_SOC = T,
   iter_count = 4,
   min_segment_length = 20,
   trace = 2,
@@ -36,13 +34,11 @@ predict_temp(
 \arguments{
 \item{tmodel}{a thmodel, or a csv from LeafSpy (default: log26Jan2026.csv)}
 
-\item{effective_pack_resistance}{in mOhms at 298.15K for SOC <= 70 percent}
-
-\item{packr85}{in mOhms, effective pack resistance at SOC = 85 percent}
+\item{effective_pack_resistance}{in mOhms at 298.15K}
 
 \item{entropic_heat}{in kJ/V, reversible (entropic) heat}
 
-\item{polarisation_irr}{in mOhms, baseline polarisation response}
+\item{polarisation_irr}{in mA, baseline exchange current (in a Tafel model)}
 
 \item{tafel_slope}{large-C polarisation response}
 
@@ -62,11 +58,9 @@ predict_temp(
 
 \item{heat_capacity}{in kJ/K}
 
-\item{gids_reserve}{dimensionless, to emulate a LeafSpy-reported SOC}
+\item{gids_reserve}{dimensionless, gids available at lSOC == 0}
 
-\item{ocv_tbl}{maps SOC onto OCV, either a 2-column tibble or an om_model}
-
-\item{use_est_SOC}{use a GIDs-derived SOC to index ocv_tbl}
+\item{ocv_tbl}{maps cSOC onto OCV, a 2-column tibble}
 
 \item{iter_count}{may be increased for a more accurate prediction}
 
@@ -105,6 +99,15 @@ thmodel records a timestamp of its modification, and the values of the
 modelling parameters used for its updated temperature predictions.
 
 Initial estimates of parameters are hardcoded in default_params().
+
+lSOC is the LeafSpy-reported soc, scaled by 1e6 to be in the range 0 to 1
+
+cSOC is computed from gids.  It has a value that is offset from lSOC in the
+50kWh pack by approximately 0.14 (when SOH=100), to account for the
+gids_reserve in the pack at lSOC == 0.0, and with a scaling of lSOC by about
+0.86 so that cSOC == lSOC == 1.0 at the maximum operating voltage for a cell
+(as disclosed by its manufacturer's spec sheet) and at the soc == 1e6 maximum
+value for this LeafSpy-reported estimate of the pack's available energy.
 }
 \examples{
 m <- predict_temp()

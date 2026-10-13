@@ -2,7 +2,7 @@
 % Please edit documentation in R/new_ocv_model.R
 \name{new_ocv_model}
 \alias{new_ocv_model}
-\title{new_ocv_model: S3 class constructor}
+\title{new_ocv_model: S3 class constructor (deprecated)}
 \usage{
 new_ocv_model(name = "", thmodels = list())
 }
@@ -15,7 +15,7 @@ new_ocv_model(name = "", thmodels = list())
 structure of class "ocv_model"
 }
 \description{
-new_ocv_model: S3 class constructor
+new_ocv_model: S3 class constructor (deprecated)
 }
 \examples{
 om <- new_ocv_model("eNV50kWh", list(eNV200ac50kWh, eNV200noac50kWh))

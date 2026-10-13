@@ -40,14 +40,10 @@ plot_fit_heats <- function(m,
     pd <- plotdata |>
       slice(from_idx:to_idx) |>
       mutate(
-        'Joule heat' = cumsum(replace_na(pred_Joule_heating, 0)) /
-          3.6e6, #in kWh
-        'Entropic heat' = cumsum(replace_na(pred_entropic_heating_rev, 0)) /
-          3.6e6,
-        'Polarisation heat' = cumsum(replace_na(pred_polarisation_heating, 0)) /
-          3.6e6,
-        'Heat pump cooling' = - cumsum(replace_na(heat_pump_cooling, 0)) /
-          3.6e6
+        'Joule heat' = waste_heatJ_kWh,
+        'Entropic heat' = pred_entropic_heating_kWh,
+        'Polarisation heat' = pred_polarisation_heating_kWh,
+        'Heat pump cooling' = - AC_energy_kWh
       )
 
     tjh <- last(pd$'Joule heat')

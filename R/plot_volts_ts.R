@@ -1,6 +1,6 @@
-#' plot_volts_ts: plot time-series of pack_volts, pred_pack_volts_from_soc
+#' plot_volts_ts: plot time-series of pack_volts, est_ocv_from_cSOC
 
-#' @param m a thmodel with predictions from predict_volts_tafel()
+#' @param m a thmodel
 #' @param from_date starting date/time
 #' @param to_date ending date/time
 #' @param from_idx starting index in thmodel, ignored if !is.null(from_date)
@@ -43,8 +43,9 @@ plot_volts_ts <- function(m,
     slice(from_idx:to_idx)
 
   missings <- is.na(pd$gids) |
-    is.na(pd$pred_pack_volts)
     is.na(pd$soc) |
+    is.na(pd$est_ocv_from_cSOC) |
+    is.na(pd$est_overvoltage) |
     is.na(pd$pack_avg_temp) |
     is.na(pd$pack_amps) |
     is.na(pd$pack_volts) |
@@ -62,16 +63,15 @@ plot_volts_ts <- function(m,
       wonky |
       missings) |>
     mutate(
-      soc = soc / 1e6, # 0.0 to 1.0
       'volts - 350' = if (volts_per_cell)
         ((pack_volts - 350) / 96)
       else
         pack_volts - 350,
       #TODO: if volts_per_cell, change names so the legend isn't misleading
-      'pred_volts - 350' = if (volts_per_cell)
-        (pred_pack_volts - 350) / 96
+      'ocv_from_cSOC - 350' = if (volts_per_cell)
+        (est_ocv_from_cSOC - 350) / 96
       else
-        pred_pack_volts - 350,
+        est_ocv_from_cSOC - 350,
       amps = if (volts_per_cell)
         pack_amps / 96
       else
@@ -80,17 +80,17 @@ plot_volts_ts <- function(m,
         est_overvoltage * 10 / 96
       else est_overvoltage * 10
     )
-  cat("Summary of soc:\n")
-  print(summary(pd$soc))
-  cat("Summary of corrected soc:\n")
-  print(summary(pd$corr_soc))
-  cat("Summary of estimated overvoltage at pack level:\n")
+  cat("Summary of cSOC:\n")
+  print(summary(pd$cSOC))
+  cat("Summary of estimated cSOC from overvoltage:\n")
+  print(summary(pd$est_ocv_from_cSOC))
+  cat("Summary of estimated pack overvoltage:\n")
   print(summary(pd$est_overvoltage))
 
   pd <- pd |>
     select(date_time,
          'volts - 350',
-         'pred_volts - 350',
+         'ocv_from_cSOC - 350',
          amps,
          'est. overvoltage * 10'
   ) |>

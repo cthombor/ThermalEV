@@ -2,7 +2,11 @@
 % Please edit documentation in R/plot_volts_pred.R, R/plot_volts_pred_volts.R
 \name{plot_volts_pred_volts}
 \alias{plot_volts_pred_volts}
-\title{plot_volts_pred_volts: plot of prediction error in pack_volts by pack_volts}
+\title{plot_volts_pred_volts: plot of prediction error in pack_volts by pack_volts
+Visual indication of an ocv_tbl which is appropriate for the type of SOC used
+to make the voltage prediction.  BMS-reported SOCs have a zero at
+pack-turtle.  Cell-manufacturer and researcher SOCs have a zero at the
+minimum operating voltage i.e a hazard of cell-bricking.}
 \usage{
 plot_volts_pred_volts(
   m,
@@ -14,6 +18,7 @@ plot_volts_pred_volts(
   to_temp = NULL,
   max_amps = NULL,
   wonky_threshold = 50,
+  plot_ocv = F,
   by_amps = TRUE
 )
 
@@ -27,6 +32,7 @@ plot_volts_pred_volts(
   to_temp = NULL,
   max_amps = NULL,
   wonky_threshold = 50,
+  plot_ocv = F,
   by_amps = TRUE
 )
 }
@@ -58,8 +64,12 @@ an Environment
 }
 \description{
 plot_volts_pred_volts: plot of prediction error in pack_volts by pack_volts
+Visual indication of an ocv_tbl which is appropriate for the type of SOC used
+to make the voltage prediction.  BMS-reported SOCs have a zero at
+pack-turtle.  Cell-manufacturer and researcher SOCs have a zero at the
+minimum operating voltage i.e a hazard of cell-bricking.
 
-plot_volts_pred_volts: plot of prediction error in pack_volts by pack_volts
+plot_volts_pred_volts: plot of pred_pack_volts_from_soc by pack_volts
 }
 \examples{
 plot_volts_pred_volts(predict_volts_tafel(eNV50kWh))

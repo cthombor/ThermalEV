@@ -1,15 +1,18 @@
-#' est_ocv_from_est_soc: refine an ocv_tbl, using est_ssoc from predict_temp()
+#' revise_ocv: refine an ocv_tbl, using predictions from predict_temp().
+#' Displays a scatterplot, if trace > S0.  n.b. the ocv_tbl is used to
+#' estimate entropic (reversible) heat generation, by lookup from the
+#' LeafSpy-reported soc.  This soc is quite different to the cell-manufacturer's
+#' soc, because it has a 0 at the vehicle-turtle level of "reserve" capacity
+#' in the pack, rather than at the lower limit of the cell operating voltage.
+#' This results in a very steep rise in OCV at small values of SOC in an
+#' ocv_tbl (default: from the cell manufacturer) that is revised to align
+#' with an soc that is estimated by a BMS in a Nissan EV.
 #'
-#' Usage notes: the new ocv_tbl can be inserted into a thmodel using
-#' predict_temp, e.g.
-#' predict_temp(eNV200ac50kWh, ocv_tbl=est_ocv(om_eNV50kWh)).
-#' This should reduce the variance in the voltage predictions; but you may
-#' also find it helpful to adjust the resistances using fit_r_to_ocv() before
-#' running est_ocv(), e.g.
-#' om <- fit_r_to_ocv_from_gids(eNV50kWh)
+#' @examples
+#' m <- revise_ocv(eNV50kWh)
 #'
-#' @param om an ocv_model, or a thmodel (for convenience)
-#' @param wonky_threshold in Volts, outlier criterion (default 50)
+#' @param m a thmodel
+#' @param wonky_threshold in volts, outlier criterion (default 70)
 #' @param max_C max C-rate for OCV estimations
 #' @param from_temp lower limit of battery temps to be analysed
 #' @param to_temp upper limit of battery temps to be analysed
@@ -18,16 +21,15 @@
 #' @param tbl_size number of SOC values in the lookup table
 #' @param methodology: "isoreg", "loess", "loess-sym", cir"
 #' @param show_gids T to colour points by GIDs, F to colour by abs(pack_amps)
-#' @param trace 0 for silent, 1 for minimal, 2 for verbose
+#' @param trace 2 for silent, 1 for minimal, 2 for verbose
 #'
-#' @returns an ocv_model with an updated ocv_tbl and voltage predictions
+#' @returns a thmodel with an updated ocv_tbl and predictions
 #' @export
 #'
 #' @examples
-#' est_ocv_from_est_soc(eNV50kWh)
-#' est_ocv_from_est_soc(om_eNV50kWh)
-est_ocv_from_est_soc <- function(om,
-                    wonky_threshold = 50,
+#' m <- revise_ocv(eNV50kWh)
+revise_ocv <- function(m,
+                    wonky_threshold = 70,
                     max_C = 0.4,
                     from_temp = NULL,
                     to_temp = NULL,
@@ -38,24 +40,21 @@ est_ocv_from_est_soc <- function(om,
                     show_gids = T,
                     trace = 1)
 {
-  if (class(om) == "thmodel") {
-    om <- new_ocv_model(name = om$name, list(om))
-  }
-  stopifnot(class(om) == "ocv_model")
-  ot <- om$ocv_tbl
-  ld <- om$logdata
-  ld <- ld |>
-    mutate(pred_error_pack_volts = pred_pack_volts - pack_volts,
-           ocv_estimate = pack_volts - pack_amps * eff_packr / 1000,
-           delta_t = date_time - dplyr::lag(date_time)) |>
-    arrange(est_ssoc, ocv_estimate)
 
-  wonky <- (ld$pred_error_pack_volts > wonky_threshold)
-  missings <- is.na(ld$ocv_estimate) | is.na(ld$est_ssoc)
-  starts <- ld$delta_t >= 120 # gap of two minutes or more
-  ends <- lead(starts)
-  singletons <- starts & ends # unreliable readings
-  high_amps <- abs(ld$pack_amps) > max_C * om$capacity / 0.375
+  stopifnot(class(m) == "thmodel")
+  ot <- m$parameters$ocv_tbl
+  ld <- m$logdata
+  stopifnot(is.element("est_ocv_from_overvoltage", names(ld)))
+  # n.b. the current version of predict_temp() computes this estimate from
+  # pack_volts, pack_amps, the Tafel parameters, estimated temperature and
+  # packr.  If a thmodel lacks this column in its logdata, then it may have
+  # been created by a prior version of this package and lack a full set
+  # of parameters for the current version.
+
+  wonky <- (abs(ld$pack_volts -350) > wonky_threshold)
+  missings <- is.na(ld$est_ocv_from_overvoltage) | is.na(ld$ssoc)
+  unreliable <- ld$segnum == 0 # short sequences
+  high_amps <- abs(ld$pack_amps) > max_C * m$capacity / 0.375
   min_temp <- if (is.null(from_temp)) -30 else from_temp
   max_temp <- if (is.null(to_temp)) 100 else to_temp
   extreme_temps <- (ld$pack_avg_temp < min_temp) | (ld$pack_avg_temp > max_temp)
@@ -69,17 +68,73 @@ est_ocv_from_est_soc <- function(om,
         sum(extreme_temps, na.rm = TRUE), "extreme-temp records,",
         sum(extreme_est_socs, na.rm = TRUE), "extreme-est-soc records,",
         sum(missings, na.rm = TRUE), "incomplete records,",
-        sum(singletons, na.rm = TRUE), "singletons, and",
+        sum(unreliable, na.rm = TRUE), "unreliable records, and",
         sum(wonky, na.rm = TRUE), "wonky lines of data\n")
   }
   ld <- ld |> filter_out(high_amps |
                            extreme_temps |
                            extreme_est_socs |
-                           missings | singletons | wonky)
+                           missings |
+                           unreliable |
+                           wonky)
   if (trace > 0) {
     cat(" total remaining records:", nrow(ld), "\n")
   }
   stopifnot(nrow(ld) > 0)
+
+  sloper <- (m$parameters$packr85 - m$parameters$effective_pack_resistance) / 15
+
+  ld <- ld |>
+    mutate(
+      delta_t = date_time - dplyr::lag(date_time),
+      eff_packr_2 = ifelse(
+        ssoc <= 0.70,
+        m$parameters$effective_pack_resistance,
+        m$parameters$effective_pack_resistance + sloper * (ssoc - 0.70)
+      ) *
+        exp(m$parameters$arrhenius_resistance *
+              (1 / 298.15 - 1 / (pack_avg_temp + 273.15))) / (hx / 100),
+      #n.b. we use measured temp and hx, not predictions as in predict_temp
+      tafel_slope_adj_2 = m$parameters$tafel_slope *
+        exp(m$parameters$arrhenius_tafel *
+              ((1 / 298.15) - (1 / (pack_avg_temp + 273.15))))
+      #TODO: explore the sensitivity of tafel_slope_adj to hx
+    )
+
+  # we use segments as defined in predict_temp()
+  for (i in unique(ld$segnum)) {
+    smask <- (ld$segnum == i)
+    ia <- ld$pack_amps[smask] # instantaneous amperage
+    ts <- ld$tafel_slope_adj_2
+    pi <- m$parameters$polarisation_irr
+    iv <- -sign(ia) * exp(ts * log(abs(ia))) * (pi / 1000)
+    # n.b. resistances are in mOhms.  pack_amps is negative when charging.
+    # iv is a cathodic overvoltage (eta) estimated by a Tafel model
+
+    # TODO: add an ohmic (charge-transfer) estimation for small
+    # abs(ia), perhaps scaled from packr, to the time-averaged response?
+
+    # TODO: are overvoltages diffusion-limited at large abs(ia)?  See
+    # https://doi.org/10.1021/acs.jpcc.9b06820
+    lambda <- ld$EMA_parameter_polarisation[[first(which(smask))]] # per-segment
+    ov <- stats::filter(
+      iv, # impulse voltages
+      filter = c(1 - lambda), # Poisson's recursive exponential window function
+      method = "recursive",
+      init = iv[[1]]
+    )
+    ld$est_overvoltage_2[smask] <- ov
+  }
+
+  ld <- ld |>
+    group_by(segnum) |>
+    mutate(
+      est_ocv_from_overvoltage_2 = pack_volts - est_overvoltage_2 +
+        pack_amps * eff_packr_2 / 1000
+      # TODO: we assume our Joule-heating parameter has a very short time
+      # constant in its ohmic effect on the pack voltage.  Is this valid?
+    ) |>
+    arrange(ssoc, est_ocv_from_overvoltage_2)
 
   min_Hx <- round(min(ld$hx), 0)
   max_Hx <- round(max(ld$hx), 0)
@@ -87,7 +142,7 @@ est_ocv_from_est_soc <- function(om,
   if (trace > 0) {
     cat(
       paste0(
-        om$name,
+        m$name,
         ": Hx = (",
         min_Hx,
         ", ",
@@ -98,8 +153,8 @@ est_ocv_from_est_soc <- function(om,
   }
 
   #enforce monotonicity in ocv table, using a least-squares fit
-  ir <- isoreg(x = ld$est_ssoc, y = ld$ocv_estimate)
-  if (trace > 1) plot(ir, xlab = "Estimated SOC", ylab = "OCV")
+  ir <- isoreg(x = ld$ssoc, y = ld$est_ocv_from_overvoltage_2)
+  if (trace > 1) plot(ir, xlab = "SOC", ylab = "OCV")
 
   # build new ocv_tbl, retaining extremal values from the current ocv_tbl
   newt <- tibble(SOC = ir$x[ir$iKnots],
@@ -129,10 +184,10 @@ est_ocv_from_est_soc <- function(om,
 
   #run isoreg "in the other direction", to estimate its bias
   ld <- ld |> mutate(
-    sod = 1 - soc # "state of discharge"
+    sod = 1 - ssoc # "state of discharge"
   ) |>
     arrange(sod)
-  ir2 <- isoreg(x = ld$sod, y = - ld$ocv_estimate)
+  ir2 <- isoreg(x = ld$sod, y = - ld$est_ocv_from_overvoltage_2)
   if (trace > 1) plot(ir2, xlab = "SOD", ylab = "-OCV")
 
   # build new ocv_tbl, retaining extremal values from the current ocv_tbl
@@ -156,8 +211,6 @@ est_ocv_from_est_soc <- function(om,
     ungroup() |>
     arrange(SOC)
 
-  om$ocv_tbl2 <- newt2
-
   # compute the mean of ocv predictions from newt and newt2
   otf <- approxfun(newt, method = "linear", rule = 2)
   otf2 <- approxfun(newt2, method = "linear", rule = 2)
@@ -169,12 +222,13 @@ est_ocv_from_est_soc <- function(om,
   }
   # let's try loess()
   ld <- ld |> mutate(
-    jsoc = jitter(soc, 0.0001)) # jitter to avoid ties
+    jsoc = jitter(ssoc, 0.0001)) # jitter to avoid ties
   if (methodology == "loess-sym") {
     # this may produce a better fit if there are outliers
-    otf4 <- loess(ocv_estimate ~ jsoc, ld, family = "symmetric")
+    otf4 <- loess(ld$est_ocv_from_overvoltage_2 ~ jsoc,
+                  ld, family = "symmetric")
   } else {
-    otf4 <- loess(ocv_estimate ~ jsoc, ld)
+    otf4 <- loess(ld$est_ocv_from_overvoltage_2 ~ jsoc, ld)
   }
   socv <- c(0:(tbl_size - 1)) / rep(tbl_size - 1, tbl_size)
   predv <- predict(otf4, data.frame(jsoc = socv))
@@ -198,7 +252,7 @@ est_ocv_from_est_soc <- function(om,
   if (methodology == "cir") {
     # the following throws a mysterious error -- possibly because it
     # can't handle this many points?
-    dr <- cir::doseResponse(x = ld$jsoc, y = ld$ocv_estimate)
+    dr <- cir::doseResponse(x = ld$jsoc, y = ld$est_ocv_from_overvoltage_2)
     ir5 <- cir::cirPAVA(dr)
     if (trace > 1) plot(ir5, xlab = "SOC", ylab = "OCV")
     newt5 <- tibble(SOC = ir5$x,
@@ -238,13 +292,13 @@ est_ocv_from_est_soc <- function(om,
       geom_line(data = newt4f, aes(x = SOC, y = OCV), colour = "blue") +
       if (show_gids)
         geom_point(data = ld, aes(
-          x = est_ssoc,
+          x = ssoc,
           y = pack_volts,
           colour = gids
         ))
     else
       geom_point(data = ld, aes(
-        x = est_ssoc,
+        x = ssoc,
         y = pack_volts,
         colour = abs(pack_amps)
       ))
@@ -256,10 +310,10 @@ est_ocv_from_est_soc <- function(om,
     plot(e +
       theme(palette.colour.continuous = "Okabe-Ito") +
       labs(,
-        x = "Estimated SOC",
+        x = "SOC",
         y = "Pack Volts",
         title = paste0(
-          om$name,
+          m$name,
           ": ", min_date,
           " to ", max_date,
           ifelse(is.null(from_temp) && is.null(to_temp),
@@ -292,10 +346,10 @@ est_ocv_from_est_soc <- function(om,
     )
   }
 
-  om$ocv_tbl <- if (methodology == "isoreg") newt3 else
+  m$ocv_tbl <- if (methodology == "isoreg") newt3 else
     if (methodology == "cir") newt5 else newt4
 
-  # retval: an ocv_model with recomputed voltage predictions
-  predict_volts(om = om, trace = trace)
+  # retval: a thmodel with recomputed predictions
+  predict_temp(m, trace = trace)
 
 }

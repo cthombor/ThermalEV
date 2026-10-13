@@ -90,26 +90,19 @@ plot_fit <- function(m,
         format.labels = "%Y-%m-%d %H:%M",
         main = paste0(
           m$name,
-          ": r = ",
+          ": R = ",
           format(m$parameters$effective_pack_resistance, digits = 3),
           # n.b. U+2009 is a thin space
-          ifelse(m$parameters$packr85 !=
-                   m$parameters$effective_pack_resistance,
-                 paste0("\u2009mΩ, packr85 = ",
-                        format(m$parameters$packr85, digits = 3),
-                        collapse = ""),
-                 ""
-          ),
-          "\u2009mΩ, pi = ",
-          format(m$parameters$polarisation_irr, digits = 3),
-          "\u2009mΩ, ts = ",
-          format(m$parameters$tafel_slope, digits = 3),
-          ", at = ",
-          format(m$parameters$arrhenius_tafel, digits = 3),
-          ", eh = ",
+          "\u2009mΩ, Rp = ",
+          format(m$parameters$polarisation_Rp, digits = 3),
+          "\u2009mΩ, R2 = ",
+          format(m$parameters$polarisation_R2, digits = 3),
+          "\u2009mΩ, eh = ",
           format(m$parameters$entropic_heat, digits = 3),
-          "\u2009kJ/V, λt = ",
-          round(m$parameters$lambda_polarisation, 5), # Tafel
+          "\u2009kJ/V, λ1 = ",
+          round(m$parameters$lambda1_polarisation, 5),
+          "\u2009s, λ2 = ",
+          round(m$parameters$lambda2_polarisation, 5),
           "\u2009s, λp = ",
           format(m$parameters$lambda_module_to_ambient, digits = 3), # passive
           "\u2009h, λa = ",
@@ -118,11 +111,12 @@ plot_fit <- function(m,
           format(m$parameters$fan_power, digits = 3),
           "\u2009W, COP = ",
           format(m$parameters$COP, digits = 3),
-          ", a = ",
-          format(m$parameters$arrhenius_resistance, digits = 3),
           ", c = ",
           format(m$parameters$heat_capacity, digits = 3),
-          "\u2009kJ/K"
+          "\u2009kJ/K, a1 = ",
+          format(m$parameters$arrhenius_resistance, digits = 3),
+          ", a2 = ",
+          format(m$parameters$arrhenius_R2, digits = 3)
         )
       )
   }

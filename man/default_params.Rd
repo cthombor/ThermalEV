@@ -31,14 +31,32 @@ arrhenius_resistance parameter in my model of the pack's thermal behaviour.
 I'm relying on fragments of a manufacturer's spec sheet posted online by a
 retailer of the CALB L300N137B 3.7 volt 3.7V 137ah lithium nmc battery cell,
 for a charge-discharge curve at 0.2C which I interpolated to derive a first
-estimate of the pack's OCV as a function of its SOC. My intention is to
-refine this estimate using observed data -- to gain a more accurate estimate
-of the effective pack resistance as a function of SOC, and also perhaps to
-add a second rate constant (as in the Butler-Volmer equation) to model
-voltage drops (and thus Joule heating) more accurately than is possible with
-a single-resistor model.  But: 150 mOhm (as derived from the charge-discharge
-curve at 70% SOC and 0.2C) is currently our default estimate of the effective
-pack resistance at 25 °C -- at all SOC.
+estimate of the pack's OCV as a function of its SOC. Experimentation has
+revealed that the LeafSpy-reported "soc" has a zero-point that's different
+to the lowest operating voltage for the cells.  I'm now computing a cSOC
+by adding an offset (of approximately 0.14) to a scaled LeafSpy
+lSOC == soc/1e6, so that the full range of cell voltages is covered by
+cSOC in the range 0 to 1.  To add to the confusion, the dashboard-reported
+state of charge (which I'd call dSOC) is different to the lSOC -- perhaps
+to discourage drivers from expecting to get any range in the bottom few
+percentage points of lSOC.
+
+Polarisation shifts within the cells' (graphite) cathode are modeled with a
+Tafel equation.  The overvoltage decays with a rather short time constant
+(about 120s, by anecdotal observation using plot_volts_ts()).  The
+polarisation_irr parameter is the constant term in a Tafel slope equation
+log(eta) = a + b log(J).  This term is often called the exchange
+current, and I scale it to mA for convenience.  The slope b is often
+called a Tafel slope. I parameterise it as a time-constant
+lambda_polarisation, with a temperature-correction of arrhenius_tafel.  I
+assume the cathodic and anodic response to a current shift has the same Tafel
+behaviour.
+
+TODO: look for evidence that the anodic response (discharging) is different
+enough to the cathodic response (charging) that it'd be worthwhile adding
+additional parameters to more accurately characterise the overvoltage $\eta$.
+Also: is the ohmic component of overvoltage adequately modelled with the
+effective_pack_resistance in our Joule-heating model?
 
 Polarisation shifts near the cells' electrodes are highly entropic, so will
 cause non-negligible (but reversible) heating and cooling whenever the pack

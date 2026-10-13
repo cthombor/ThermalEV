@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_volts.R
 \name{plot_volts}
 \alias{plot_volts}
-\title{plot_volts_ts: plot time-series of pack_volts and pack_volts_pred}
+\title{plot_volts_ts: plot time-series of pack_voltss and pack_volts_pred}
 \usage{
 plot_volts(
   m,
@@ -12,7 +12,7 @@ plot_volts(
   to_idx = NULL,
   min_sgids = NULL,
   max_sgids = NULL,
-  volts_per_cell = T,
+  volts_per_cell = F,
   scale_colours = 0
 )
 }
@@ -39,7 +39,7 @@ plot_volts(
 an Environment
 }
 \description{
-plot_volts_ts: plot time-series of pack_volts and pack_volts_pred
+plot_volts_ts: plot time-series of pack_voltss and pack_volts_pred
 }
 \examples{
 plot_volts(eNV200ac24kWh_2025)
