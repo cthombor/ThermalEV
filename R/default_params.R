@@ -175,7 +175,7 @@ default_params <- function(m,
                        heat_capacity =
                          ifelse(m$capacity == 24, 210, 234),
                        entropic_heat =
-                         ifelse(m$capacity == 24, 14, 12),
+                         ifelse(m$capacity == 24, 0.07, 0.07),
                        lambda_module_to_ambient =
                          ifelse(m$capacity == 24, 7.5, 7.5),
                        lambda_module_AC_to_ambient =

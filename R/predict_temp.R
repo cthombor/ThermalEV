@@ -230,6 +230,12 @@ predict_temp <- function(tmodel = NULL,
     # avoids a possible runaway negative COP in optim() if fan_power is low.
   }
 
+  if (polarisation_Rp > effective_pack_resistance - 1) {
+    polarisation_Rp <- effective_pack_resistance - 1
+    warning("Setting R1 to 1 mΩ, by reducing an excessively-large Rp",
+            "to Reff - 1\n")
+  }
+
   #compute delta_t for runs of near-consecutive samples
   logtibble <- logtibble |>
     arrange(date_time) |>
@@ -541,10 +547,8 @@ predict_temp <- function(tmodel = NULL,
         # adequate accuracy, it may be necessary to have an explicit R1
         # parameter with its own temperature compensation, and to compute Reff
         # as the sum of R1 and Rp. However this would make it more difficult to
-        # drop back to a simple 1-resistor EC; at present this can be done by
-        # setting polarisation_R1 equal to effective_pack_resistance,
-        # polarisation_R2 to a very high value, and the two polarisation time
-        # constants to 0.
+        # drop back to a simple 1-resistor EC; at present this can be done
+        # simply, by setting the two polarisation time-constants to 0.
         r1_tc = eff_packr - rp_tc,
         r2_tc = polarisation_R2 *
           exp(arrhenius_R2 *
@@ -598,30 +602,33 @@ predict_temp <- function(tmodel = NULL,
       # possibility would be to use motor draw and charging power in an
       # estimation of systemic bias in iac, soc, and ocv_tbl.
 
-      ia1 <- - as.vector(stats::filter(idv / r1,
+      ia1 <- - as.vector(stats::filter(l1 * idv / r1,
                            filter = c(1 - l1),
                            method = "recursive",
-                           # exponential decay
+                           # exponential decay with time constant l1
                            init = idv[1] / r1[1]
       )) # polarisation current through r1 via c1
-      # TODO: compare ia1 with a more accurate simulation, in which lambda1
-      # varies over a segment as the pack_temp changes.  Regrettably this is
-      # outside the scope of the C-coded stats::filter(), so it'd be an
-      # interpreted loop with an iteration count of (wend[i] - wstart[i] - 1)
+      # n.b. setting l1 to 0 results in a zero estimate for ia1, allowing
+      # a fallback to a simpler model with no capacitance across r1.
 
-      iap <- - as.vector(stats::filter(idv / reff,
+      # TODO: compare ia1 with a more accurate simulation, in which lambda1
+      # varies over a segment as the pack_temp changes.  Regrettably, such a
+      # time-variant filter is outside the scope of the C-coded stats::filter(),
+      # so this would require a loop for each segment i with an iteration count
+      # of (wend[i] - wstart[i] - 1) -- as we have done below for the thermal
+      # simulation.
+
+      iap <- - as.vector(stats::filter(l1 * idv / reff,
                                      filter = c(1 - l1),
                                      method = "recursive",
-                                     # exponential decay
                                      init = idv[1] / reff[1]
       )) # polarisation current through r1 via rp
       # n.b. the voltage drop across r1 is (iac + ia1 + iap)*r1, and
       # the voltage drop across rp is (iac + iap)*rp
 
-      ia2 <- - as.vector(stats::filter(idv / r2,
+      ia2 <- - as.vector(stats::filter(l2 * idv / r2,
                            filter = c(1 - l2),
                            method = "recursive",
-                           # exponential decay
                            init = idv[1] / r2[1]
       )) # polarisation current through r2
 
@@ -665,7 +672,6 @@ predict_temp <- function(tmodel = NULL,
                         reff, r1, rp, r2,
                         iac, ia1, iap, ia2, iau)
         write.csv(diagt, paste0("seg913.", iternum, ".csv"))
-        browser()
       }
 
       logtibble$est_Joule_heating_amperage[wstart[i]:wend[i]] <- iac
@@ -698,11 +704,13 @@ predict_temp <- function(tmodel = NULL,
       group_by(segnum) |>
       mutate(
         est_Joule_heating =
+          delta_t *
           est_Joule_heating_amperage * est_Joule_heating_amperage *
           eff_packr / 1000,
-        # n.b. resistances are in mOhms
+        # in Ws.  n.b. resistances are in mOhms
 
         est_Joule_heating_slope_corr =
+          delta_t *
           (est_Joule_heating_amperage * est_Joule_heating_amperage +
              slope_amps * slope_amps / 2) * eff_packr / 1000,
         # TODO: is this correction helpful, irrelevantly small, or badly skewed
@@ -713,84 +721,71 @@ predict_temp <- function(tmodel = NULL,
         # its first derivative tricky to estimate in an unbiased way?
 
         est_polarisation_heating_1 =
+          delta_t *
           est_polarisation_amperage_1 * est_polarisation_amperage_1 *
           r1_tc / 1000,
 
         est_polarisation_heating_p =
+          delta_t *
           est_polarisation_amperage_p * est_polarisation_amperage_p *
           eff_packr / 1000,
 
         est_polarisation_heating_2 =
+          delta_t *
           est_polarisation_amperage_2 * est_polarisation_amperage_2 *
           r2_tc / 1000,
 
         est_soc = f_ocv_to_soc(est_ocv_from_pack_behaviour),
 
-        # n.b. estimating the reversible (entropic) heating requires an
-        # estimate of delta OCV.  We have many ways to estimate this!
-
-        delta_ocv_from_cSOC =
-          if_else(segnum == 0,
-                  NA,
-                  replace_na(
-                    est_ocv_from_cSOC -
-                      dplyr::lag(est_ocv_from_cSOC),
-                    0)),
-        # n.b. dplyr::lag() is hazardous on grouped tibbles, when groups
-        # have non-sequential row indices.  I thus exclude segnum==0 from
-        # the lag, to migigate its corruptive influence on extremal dplyr::lag()
-        # and dblyr::lead() within "adjacent" groups.
-        # See https://stackoverflow.com/questions/28235074/
-        # dplyr-lead-and-lag-wrong-when-used-with-group-by
-
-        delta_ocv_from_pack_behaviour =
-          if_else(segnum == 0,
-                  NA,
-                  replace_na(
-                    est_ocv_from_pack_behaviour -
-                      dplyr::lag(est_ocv_from_pack_behaviour),
-                    0)),
-        # TODO: determine if delta_ocv_alt is more predictive
-        # of entropic heating than is delta_ocv
-
         est_entropic_heating =
-          delta_ocv_from_pack_behaviour * entropic_heat * 1000, # in Ws
+          delta_t *
+          pack_amps * (pack_avg_temp + 298.15) * entropic_heat / 1000,
+        # in Ws
         # n.b. this is a reversible heat, causing the pack to heat somewhat
         # less when discharging at a given current than when charging at the
         # same rate.
 
         est_entropic_heating_alt =
-          delta_ocv_from_cSOC * (entropic_heat * 1000 +
-                         graphite_entropy(est_ocv_from_pack_behaviour) -
-                         graphite_entropy(0.5)),
-        # n.b. we use the eighth order fitting polynomial from Chen (2023) (doi:
-        # 10.1016/j.applthermaleng.2022.119852) for entropy shifts in an
-        # graphite anode.  We parameterise this as a correction to our
-        # single-parameter fit to the entropic shifts of this pack at
-        # SOC == 0.5.
+          delta_t *
+          pack_amps *
+          (pack_avg_temp + 298.15) * (
+            - 0.07 -
+              graphite_entropy(cSOC) +
+              entropic_heat) /
+          1000, # in W-s
+        # the entropy change of the graphite anode is roughly 0.07 mV/K
+        # for SOC > 0.5, with an SOC-related variance of about 0.02 mV/K.
+        # our "entropic heat" parameter is intended to be the central
+        # tendency (to minimise the swing between the simple estimation
+        # and the SOC-related ones)
 
-        # TODO: Estimate the SOC-dependency of entropy shifts at the cathode,
-        # which seem likely to be significant for all NMC+electrolyte variants
-        # especially at low SOC.  This estimation will be accurate only if all
-        # other important factors in the thermal behaviour are well-predicted,
-        # along with an accurate estimation of SOC; i.e. there's a severe risk
-        # of overfitting.
+        # n.b. the sign of pack_amps is reversed from the convention in
+        # the technical literature
+
+        # n.b. the entropy change of an NMC cathode is dependent on its
+        # NMC ratios, its doping, and the electrolyte; and may be quite
+        # large for low SOC.
+
+        # TODO: analyse low-SOC segments in the LeafSpy traces, to see if
+        # their thermal evolution might be confidently attributed to an
+        # extraordinarily-large entropic heating or cooling.
 
         est_entropic_heating_alt_alt =
-          delta_ocv_from_cSOC * entropic_heat * 1000,
-
-        est_entropic_heating_alt_alt_alt =
-          delta_ocv_from_cSOC *
-          (entropic_heat * 1000 +
-             graphite_entropy(est_ocv_from_cSOC) -
-             graphite_entropy(0.5)),
+          delta_t *
+          pack_amps *
+          (pack_avg_temp + 298.15) * (
+            - 0.07 -
+              graphite_entropy(est_soc) +
+              entropic_heat) /
+          1000,
+        # in W-s
 
         cooling_power = 50 * est_pwr_a_c_50w - fan_power,
         cooling_power = ifelse(cooling_power < 0, 0, cooling_power),
         heat_pump_cooling = ifelse(
           charge_mode == 0,
           0, # AC is cooling the cabin
-          COP * cooling_power * delta_t # AC is cooling the battery
+          delta_t * COP * cooling_power # AC is cooling the battery
         ), # in Ws
 
         # estimate per-sample delta-heating of pack (in temperature K)
@@ -874,7 +869,8 @@ predict_temp <- function(tmodel = NULL,
                replace_na(est_entropic_heating, 0)) / 3.6e6,
              est_polarisation_heating_kWh = cumsum(
                replace_na(est_polarisation_heating_1, 0) +
-                 replace_na(est_polarisation_heating_2, 0)) / 3.6e6,
+                 replace_na(est_polarisation_heating_2, 0) +
+                 replace_na(est_polarisation_heating_p, 0)) / 3.6e6,
              AC_energy_kWh = cumsum(
                replace_na(heat_pump_cooling, 0)) / 3.6e6,
              .before = "cp1")
@@ -931,6 +927,10 @@ predict_temp <- function(tmodel = NULL,
           interval_entropic_heating_kWh
         interval_mean_unattributed_amperage <-
           mean(logtibble$unattributed_amperage[from_idx:to_idx], na.rm = T)
+        interval_meansq_unattributed_amperage <-
+          mean(logtibble$unattributed_amperage[from_idx:to_idx] *
+                 logtibble$unattributed_amperage[from_idx:to_idx],
+               na.rm = T)
         cat(paste0("Total heating =", round(interval_total_heating, 0),
             " kWh. ",
             round(interval_Joule_heating_kWh /
@@ -939,11 +939,13 @@ predict_temp <- function(tmodel = NULL,
             round(interval_entropic_heating_kWh /
                     interval_total_heating * 100, 1),
             "% entropic heat + ",
-            round(interval_entropic_heating_kWh /
+            round(interval_polarisation_heating_kWh /
                     interval_total_heating * 100, 1),
             "% polarisation heat\n"))
         cat("Mean unattributed amperage:",
-            round(interval_mean_unattributed_amperage, 1),,
+            round(interval_mean_unattributed_amperage, 1),
+            "; Mean(iau*iau):",
+            round(interval_meansq_unattributed_amperage, 1),
             "\n"
         )
       }
@@ -979,6 +981,10 @@ predict_temp <- function(tmodel = NULL,
           interval_entropic_heating_kWh
         interval_mean_unattributed_amperage <-
           mean(logtibble$unattributed_amperage[from_idx:to_idx], na.rm = T)
+        interval_meansq_unattributed_amperage <-
+          mean(logtibble$unattributed_amperage[from_idx:to_idx] *
+                 logtibble$unattributed_amperage[from_idx:to_idx],
+               na.rm = T)
         cat(paste0("Total heating = ", round(interval_total_heating, 0),
             " kWh. ",
             round(interval_Joule_heating_kWh /
@@ -987,7 +993,7 @@ predict_temp <- function(tmodel = NULL,
             round(interval_entropic_heating_kWh /
                     interval_total_heating * 100, 1),
             "% entropic heat + ",
-            round(interval_entropic_heating_kWh /
+            round(interval_polarisation_heating_kWh /
                     interval_total_heating * 100, 1),
             "% polarisation heat\n"))
         # n.b. the estimated COP of the heatpump is irrelevant, as we report
@@ -1000,13 +1006,11 @@ predict_temp <- function(tmodel = NULL,
         # heatpump & fan energy, other 12V supply energy, and "waste heat".
         cat("Mean unattributed amperage:",
             round(interval_mean_unattributed_amperage, 1),
+            "; Mean(iau*iau):",
+            round(interval_meansq_unattributed_amperage, 1),
             "\n")
       }
     }
-  }
-
-  if (trace > 0) {
-    cat(" MSE =", round(MSE_of_fit(m), 4), "\n")
   }
 
   if (trace > 1) {
@@ -1021,6 +1025,11 @@ predict_temp <- function(tmodel = NULL,
     if (trace > 2) {
       plot(GIDs, cSOC - est_SOC, main = tmodel$name)
     }
+
+  }
+
+  if (trace > 0) {
+    cat("Thermal MSE =", round(MSE_of_fit(m), 4), "\n")
   }
 
   return(m)
