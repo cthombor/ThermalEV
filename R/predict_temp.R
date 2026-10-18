@@ -209,14 +209,14 @@ predict_temp <- function(tmodel = NULL,
                ", R2 = ", round(polarisation_R2, 5),
                ", λp = ", round(lambda_module_to_ambient, 5), # passive cooling
                ", λa = ", round(lambda_module_AC_to_ambient, 5), # active A/C
-               ", λt1 = ", round(lambda1_polarisation, 5), # RpC1 time-constant
+               ",\n λt1 = ", round(lambda1_polarisation, 5), # RpC1 time-constant
                ", λt2 = ", round(lambda2_polarisation, 5), # R2C2 time-constant
                ", fanp = ", round(fan_power, 5),
                ", COP = ", round(COP, 5),
                ", aR = ", round(arrhenius_resistance, 5),
                ", aR2 = ", round(arrhenius_R2, 5),
                ", gr = ", gids_reserve,
-               "; "))
+               "\n"))
   }
 
   if (trace > 1) {
@@ -372,6 +372,11 @@ predict_temp <- function(tmodel = NULL,
                             method = "linear",
                             rule = 2)
 
+  f_ocv_to_dvdc <- approxfun(x = ocv_tbl$OCV,
+                             y = ocv_tbl$DVDC,
+                             method = "linear",
+                             rule = 2)
+
   logtibble <- logtibble |>
     mutate(segnum = segnumv, .before = pack_avg_temp) |>
     group_by(segnum) |>
@@ -386,6 +391,9 @@ predict_temp <- function(tmodel = NULL,
       # simulation if the timing irregularities are correlated with the
       # magnitude of shifts in pack voltage or current.  This seems very
       # unlikely, but perhaps a cursory investigation would still be merited?
+      # For example: the EMA parameter might be adjusted on a per-sample basis,
+      # and this should reduce any bias from correlations of sampling frequency
+      # with the quantity being time-averaged.
 
       pred_pack_avg_temp =
         if_else(segnum == 0, NA, dplyr::first(pack_avg_temp)),
@@ -397,12 +405,15 @@ predict_temp <- function(tmodel = NULL,
       # n.b. the scaling of EMA_parameters is per-segment
       EMA_parameter_module_AC_to_ambient =
         min(1.0, sampling_interval /
-              (lambda_module_AC_to_ambient * 3600)), # parameterised in hours
-      EMA_parameter_p1 =
-        min(1.0, sampling_interval / lambda1_polarisation), # seconds
-      EMA_parameter_p2 =
-        min(1.0, sampling_interval / lambda2_polarisation), # seconds
+              (lambda_module_AC_to_ambient * 3600)),
+      # EMA_parameter_p1 =
+        # min(1.0, sampling_interval / lambda1_polarisation),
+      # EMA_parameter_p2 =
+        # min(1.0, sampling_interval / lambda2_polarisation),
       # n.b. the polarisation time constants are adjusted below for pack_temp
+      # TODO: see if adequate accuracy is obtained without this fiddly
+      # adjustment for pack_temp, in which case the code above should be
+      # reverted.
 
       .before = pack_avg_temp
     ) |>
@@ -414,12 +425,12 @@ predict_temp <- function(tmodel = NULL,
   logtibble <- logtibble |>
     mutate(
       lSOC = soc / 1e6, # scale this 20-bit integer to a 0-1 range
-      cSOC = gids * 0.080 / (m$capacity * soh / 100),
-      # cSOC is a "pure" SOC with no reserve, so that my estimated-OCV tables
-      # are directly comparable to published results for cells (albeit with
-      # differences in exactly how the "capacity" is defined -- which may be
-      # relative to a 0.2C charge/discharge table in the OEM firmware for the
-      # LeafSpy BMS)
+      cSOC = (gids_reserve + gids) * 0.080 / (m$capacity * soh / 100),
+      # cSOC is a "pure" SOC with no reserve, so that the mapping of SOC onto
+      # OCV in ocv_tbl() is directly comparable to published results for cells
+      # (albeit with differences in exactly how the cell capacity is defined in
+      # kWh, e.g. over a 0.2C discharge from a specified maximum operating
+      # voltage to a specified minimum operating voltage, at 25 degrees C)
       est_lSOC = SOC_reserve +
         SOC_usable * gids * 0.080 / (m$capacity * soh / 100),
       # est_lSOC is an attempt to mimic the computation soc by the OEM BMS for
@@ -534,147 +545,172 @@ predict_temp <- function(tmodel = NULL,
     logtibble <- logtibble |>
       group_by(segnum) |>
       mutate(
-        eff_packr = effective_pack_resistance *
+        arr_factor =
           exp(arrhenius_resistance *
                 (1 / 298.15 - 1 / (pred_pack_avg_temp + 273.15))) /
           (pred_hx / 100),
-        rp_tc = polarisation_Rp *
-          exp(arrhenius_resistance *
-                (1 / 298.15 - 1 / (pred_pack_avg_temp + 273.15))) /
-          (pred_hx / 100),
+        eff_packr_tc = arr_factor * effective_pack_resistance,        ,
+        rp_tc = arr_factor * polarisation_Rp,
         # TODO: validate the temperature-corrected Rp using the same Arrhenius
-        # constant for Rp as for the series combination R1 - Rp == Reff.  For
+        # constant for Rp as for the series combination R1 + Rp = Reff.  For
         # adequate accuracy, it may be necessary to have an explicit R1
         # parameter with its own temperature compensation, and to compute Reff
         # as the sum of R1 and Rp. However this would make it more difficult to
         # drop back to a simple 1-resistor EC; at present this can be done
         # simply, by setting the two polarisation time-constants to 0.
-        r1_tc = eff_packr - rp_tc,
-        r2_tc = polarisation_R2 *
+        r1_tc = eff_packr_tc - rp_tc,
+        rs_tc = r1_tc * rp_tc / eff_packr_tc,
+        # n.b. this is the lumped effective resistance of (R1 - (Rp // C1))
+        l1_tc = arr_factor * lambda1_polarisation,
+        # n.b. we assume the lumped ("double layer") capacitance C1 is
+        # unaffected by temperature
+        ep1_tc = min(1.0, sampling_interval / l1_tc),
+        # recomputed for each iteration, shifting as the pack temp evolves
+        # TODO: eyeball-estimate the time-constant for the relaxation of this
+        # polarisation heat at widely differing pack temperatures, to see
+        # if there's empirical support for the assumption that it should
+        # roughly halve for every 18 degree rise in temperature.
+
+        arr_factor2 =
           exp(arrhenius_R2 *
                 (1 / 298.15 - 1 / (pred_pack_avg_temp + 273.15))) /
           (pred_hx / 100),
+        r2_tc = arr_factor2 * polarisation_R2,         ,
         # TODO: is arrhenius_R2 important to the accuracy of our model?  Seems
         # fiddly... and having yet-another parameter is opening yet-another door
         # to overfitting, as well as wasting resource in a non-linear
-        # optimisation and confusing the reportage of a best-fit with fiddly
-        # adjustments of dubious validity to the value of a weakly-fitted
-        # parameter.
-        lambda1 = EMA_parameter_p1 *
-          exp(arrhenius_resistance *
-                ((1 / 298.15) - (1 / (pred_pack_avg_temp + 273.15)))),
-        lambda2 = EMA_parameter_p2 *
-          exp(arrhenius_R2 *
-                ((1 / 298.15) - (1 / (pred_pack_avg_temp + 273.15))))
+        # optimisation and confusing the reportage of a best-fit with
+        # adjustments of dubious validity to a parameter which affects
+        # the timing of pack heating by a matter of seconds.
+        l2_tc = arr_factor2 * lambda2_polarisation,
+        ep2_tc = min(1.0, sampling_interval / l2_tc),
+        # n.b. the effective resistance for lambda2_polarisation is r2
+
+        est_Joule_heating_amperage = pack_amps
+        # a first estimate, assuming no polarisation currents
       ) |>
       ungroup()
 
     for (i in seq(nsegments)[which(!segexclude)]) {
       ia <- logtibble$pack_amps[wstart[i]:wend[i]] # instantaneous amperage
       iv <- logtibble$pack_volts[wstart[i]:wend[i]] # instantaneous voltage
-      idv <- replace_na(iv - dplyr::lag(iv), 0) # instantaneous delta voltage
-      reff <- logtibble$eff_packr[wstart[i]:wend[i]] / 1000 # in Ohms
+      idv <- replace_na(iv - dplyr::lag(iv), 0) # instantaneous delta volts
+      si <- logtibble$sampling_interval[wstart[i]]
+      reff <- logtibble$eff_packr_tc[wstart[i]:wend[i]] / 1000 # in Ohms
       r1 <- logtibble$r1_tc[wstart[i]:wend[i]] / 1000
-      r2 <- logtibble$r2_tc[wstart[i]:wend[i]] / 1000
-      rp <- logtibble$rp_tc[wstart[i]:wend[i]] / 1000
-      l1 <- mean(logtibble$lambda1[wstart[i]:wend[i]], na.rm=T)
-      l2 <- mean(logtibble$lambda2[wstart[i]:wend[i]], na.rm=T)
-
+      r2 <- logtibble$r2_tc[wstart[i]:wend[i]] / 1000 # for debugging
+      rp <- logtibble$rp_tc[wstart[i]:wend[i]] / 1000 # for debugging
+      rs <- logtibble$rs_tc[wstart[i]:wend[i]] / 1000 # for debugging
+      ep1 <- mean(logtibble$ep1_tc[wstart[i]:wend[i]], na.rm=T)
+      ep2 <- mean(logtibble$ep2_tc[wstart[i]:wend[i]], na.rm=T)
+      ep3 <- ep1 * ep2 / (ep1 + ep2)
+      # n.b. we time-average the adjustments to ocv over a slightly longer
+      # timescale than the polarisation-current relaxations
       ocv <- logtibble$est_ocv_from_pack_behaviour[wstart[i]:wend[i]]
+      iac <- logtibble$est_Joule_heating_amperage[wstart[i]:wend[i]]
+      # estimated charging current, from prior iteration or initialisation
+
+      idv_adj <- idv +
+        iac * si * f_ocv_to_dvdc(ocv)
+      # idv, adjusted for the shift in OCV
+      # n.b. this adjustment is independent of the BMS-estimated SOC, allowing
+      # an alternative estimation of SOC (essentially from coulomb-counting
+      # over segments)
+
+      ia1 <- - as.vector(stats::filter(ep1 * idv_adj / r1,
+                                       filter = c(1 - ep1),
+                                       method = "recursive",
+                                       init = 0))
+      # polarisation current of C1 via R1
+      # n.b. by Nissan convention, pack_amps is negative when charging, so
+      # an elevated pack voltage (idv > 0) is indicative of a decrease in
+      # current through R1 due to polarisation.
+
+      # n.b. setting lambda1_polarisation to 0 results in ep1 = 1, which yields
+      # a zero estimate for ia1, allowing a fallback to a simpler model with no
+      # capacitance across r1.  Setting both polarisation lambdas to 0 should
+      # result in iac being estimated as equal to ia, with no change to the
+      # (irrelevant) estimation of ocv in each iteration.
+
+      iap <- as.vector(stats::filter(ep1 * idv_adj / reff,
+                                       filter = c(1 - ep1),
+                                       method = "recursive",
+                                       init = 0))
+      # polarisation current of C1 via Rp.
+      # n.b. a delta in pack_volts due to a change in the load or charging
+      # supply causes an increase in the current through the series R1-RP.  The
+      # charging and discharging of C1 is through R1 // Rp, which is why the
+      # time-constant for ep1 has an effective resistance of
+      # 1/(1/R1 + 1/Rp) = (R1*Rp)/(R1+Rp).  Ref: Ramón 2022,
+      # DOI: 10.1007/s10921-022-00903-z
+
+      # TODO: confirm that a long-term time-average of iap + ia1 has
+      # a central tendency of 0, with the magnitude of short-term deviations
+      # bounded by C1.  Perhaps: estimate a voltage at the junction of R1 and
+      # Rp, by coulomb-counting at C1?
+
+      # TODO: compare polarisations with a more accurate simulation, in which
+      # polarisation lambdas vary with the pack_temp within each segment (rather
+      # than being fixed at the mean value of the estimate pack temp within each
+      # segment). Regrettably, such a time-variant filter is outside the scope
+      # of the C-coded stats::filter(), so this would require a loop for each
+      # segment i with an iteration count of (wend[i] - wstart[i] - 1) -- as we
+      # have done below for the thermal simulation.
+
+      ia2 <- - as.vector(stats::filter(ep2 * idv_adj / r2,
+                                       filter = c(1 - ep2),
+                                       method = "recursive",
+                                       init = 0))
+
+      iac <- ia - ia1 - iap - ia2 # pack_amps less polarisation amperages
+
+      ocv_prime <-
+        as.vector(
+          stats::filter(
+            ep3 * (iv + iac * reff - iac * si * f_ocv_to_dvdc(ocv)),
+            filter = c(1 - ep3),
+            method = "recursive",
+            # exponential smoothing, with time constant 1/ep3
+            # n.b. this is longer than either polarisation time-constant
+            init = ocv[[1]]
+          ))
+      # n.b. OCV rises as the pack is charged (which, by Nissan convention, is
+      # a negative value for the charging current iac).  The charging current
+      # causes a voltage drop across reff (which by Nissan convention, has
+      # the same sign as iac).
+
       overv <- iv - ocv
-      # current estimate of overvoltage
+      # prior estimate of overvoltage
+      overv_prime <- iv - ocv_prime
+      iac_prime <- - overv_prime / reff
+      # revised estimate of charging current (-iac)
 
-      iac <- ia
-      # estimate of charging current (through r1-rp)
-      # TODO: find a reliable way to estimate the overvoltage, so that
-      #     iac <- - overv / reff
-      # This will depend critically on the accuracy of entries in ocv_tbl
-      # and on the accuracy of the SOC estimate.  At present we attribute all
-      # of ia to iac, but this violates Kirchhoff's Law whenever there are
-      # non-negligible polarisation currents.  Furthermore, we assume the
-      # voltages across the capacitors C1 and C2 are always at steady state
-      # when we attribute idv to the polarisation currents, even though iac may
-      # change rapidly as a result of motor activity and the time-constants
-      # on polarisation are significantly longer than the sampling interval.
-      # One possibility for improvement would be to estimate time-series
-      # for V1 (across C1) and V2 (across C2), using these to adjust the
-      # way in which ia1, ia2, and iap are estimated from idv.  Another
-      # possibility would be to use motor draw and charging power in an
-      # estimation of systemic bias in iac, soc, and ocv_tbl.
+      iau <- ia - ia1 - iap - ia2 - iac_prime
+      # unattributed current, indicative of error in the simulation. the
+      # charging and discharging of C1 and C2 will cause transient perturbations
+      # in iau, but a time-averaged iau should always stay close to 0.
 
-      ia1 <- - as.vector(stats::filter(l1 * idv / r1,
-                           filter = c(1 - l1),
-                           method = "recursive",
-                           # exponential decay with time constant l1
-                           init = idv[1] / r1[1]
-      )) # polarisation current through r1 via c1
-      # n.b. setting l1 to 0 results in a zero estimate for ia1, allowing
-      # a fallback to a simpler model with no capacitance across r1.
-
-      # TODO: compare ia1 with a more accurate simulation, in which lambda1
-      # varies over a segment as the pack_temp changes.  Regrettably, such a
-      # time-variant filter is outside the scope of the C-coded stats::filter(),
-      # so this would require a loop for each segment i with an iteration count
-      # of (wend[i] - wstart[i] - 1) -- as we have done below for the thermal
-      # simulation.
-
-      iap <- - as.vector(stats::filter(l1 * idv / reff,
-                                     filter = c(1 - l1),
-                                     method = "recursive",
-                                     init = idv[1] / reff[1]
-      )) # polarisation current through r1 via rp
-      # n.b. the voltage drop across r1 is (iac + ia1 + iap)*r1, and
-      # the voltage drop across rp is (iac + iap)*rp
-
-      ia2 <- - as.vector(stats::filter(l2 * idv / r2,
-                           filter = c(1 - l2),
-                           method = "recursive",
-                           init = idv[1] / r2[1]
-      )) # polarisation current through r2
-
-      iau <- ia - iac - ia1 - iap - ia2
-      # unattributed current, indicative of error in the simulation
-
-      ocv_prime <- iv +
-        (iac + ia1 + iap) * r1 +
-        (iac + iap) * rp +
-        ia2 * r2
-      # revised estimate of ocv
-      # n.b. pack voltage is depressed by a discharge (positive sign on ia)
-
-      # TODO: find a reliable estimation of an iac_prime, ia1_prime, ia2_prime,
-      # and iap_prime from estimations of errors in the electrical simulation
-      # e.g. Kirchhoff's Law violations at the junction of R1 and Rp,
-      # estimations of non-steady-state voltages across C1 and C2, or
-      # coulomb-counting on iac (scaled by pack usable capacity) vs
-      # LeafSpy-reported changes in SOC.
-
-      if (any(abs(iau) > 1000)) {
+      DEBUG = T
+      if (DEBUG && any(abs(iau) > 1000) || (i == 913) || (i == 672)) {
         # n.b. excessive violations of Kirchhoff's Law are indicative of a
         # highly-inaccurate simulation, perhaps worthy of an immediate
-        # investigation
-        diagt <- tibble(ia, iv, idv, ocv, ocv_prime,
-                        reff, r1, rp, r2,
-                        iac, ia1, iap, ia2, iau)
+        # investigation.
+        # n.b. segments 913 and 672 of eNV50kWh.rda have strong polarisations
+        diagt <- tibble(ia, iv, idv, idv_adj,
+                        overv, overv_prime, ocv, ocv_prime,
+                        iac, iac_prime, ia1, iap, ia2, iau,                        reff, r1, rp, rs, r2,
+                        ep1, ep2, ep3)
         write.csv(diagt, paste0("seg", i, ".", iternum, ".csv"))
-        browser()
+        if (any(abs(iau) > 1000)) {
+          cat("Excessive current flow.  Aborting.\n")
+          browser()
+        }
       }
-      # TODO: remove this diagnostic code prior to a release, but perhaps stop
-      # if excessive violations of Kirchhoff's Law are detected?
-      #     stopifnot(all(abs(ia - iac - ia1 - iap - ia2) < 1000))
+      # TODO: remove this diagnostic code prior to a release, but perhaps
+      # still stop if excessive violations of Kirchhoff's Law are detected?
+      # if (!DEBUG) stopifnot(all(abs(iau) < 1000))
 
-      # TODO: see if prediction errors correlate with the sign of ia.  I'm
-      # assuming the same equivalent circuit for both charging and discharging,
-      # but this assumption must be validated.
-
-      if (i == 913) { # this is an interesting segment in env50kWh.rda
-        diagt <- tibble(ia, iv, idv, ocv, ocv_prime,
-                        reff, r1, rp, r2,
-                        iac, ia1, iap, ia2, iau)
-        write.csv(diagt, paste0("seg913.", iternum, ".csv"))
-      }
-
-      logtibble$est_Joule_heating_amperage[wstart[i]:wend[i]] <- iac
+      logtibble$est_Joule_heating_amperage[wstart[i]:wend[i]] <- iac_prime
       # charging/discharging amperage of traction pack
       logtibble$est_polarisation_amperage_1[wstart[i]:wend[i]] <- ia1
       logtibble$est_polarisation_amperage_p[wstart[i]:wend[i]] <- iap
@@ -685,20 +721,19 @@ predict_temp <- function(tmodel = NULL,
       # adjusted estimate of ocv
       logtibble$unattributed_amperage[wstart[i]:wend[i]] <- iau
       # unattributed amperage, indicative of inaccuracy in the elec model
-
     }
 
-    # TODO: consider transmogrifying the code above into the tidyverse.
-    # DONE: Not a good idea.
-    # It's far from clear to me whether the tidyverse will support grouped
-    # calls to stats::filter() without workarounds.  More importantly: the
-    # code above is more amenable to modification, e.g. as a halfway-house to
-    # a more accurate simulation with lambda that vary within an interval.
-    # Such a simulation is neither vectorisable nor supported by
-    # stats::filter(), but it could be tidily expressed in a language (e.g. C)
-    # with an optimising compiler capable of performing loop unrolling (for
-    # efficient execution on a superscalar CPU). Estimated cost: 1 SMOP.
-    # Estimated ROI: negative.
+    # TODO: consider transmogrifying the code above into the tidyverse. DONE:
+    # Not a good idea.  Estimated cost: 1 SMOP.  Estimated ROI: negative. It's
+    # far from clear to me whether the tidyverse will support grouped calls to
+    # stats::filter() without ugly workarounds.  More importantly: the code
+    # above aids diagnostic analyses from the browser, as well as being more
+    # amenable to modification into a more accurate (but even less tidy)
+    # simulation with polarisation lambdas which vary within an interval with
+    # pack temperature. Such a simulation is neither vectorisable nor supported
+    # by stats::filter(), but it could be tidily expressed in a language (e.g.
+    # C) with an optimising compiler capable of performing loop unrolling for
+    # efficient execution on a superscalar CPU.
 
     logtibble <- logtibble |>
       group_by(segnum) |>
@@ -736,31 +771,28 @@ predict_temp <- function(tmodel = NULL,
           r2_tc / 1000,
 
         est_soc = f_ocv_to_soc(est_ocv_from_pack_behaviour),
+        # This may shed light on the apparently-wonky estimation of soc
+        # by the reflashed firmware in the 50kWh BMS.
 
         est_entropic_heating =
           delta_t *
-          pack_amps * (pack_avg_temp + 298.15) * entropic_heat / 1000,
-        # in Ws
+          pack_amps *
+          (pack_avg_temp + 298.15) * (entropic_heat +
+                                        graphite_entropy(cSOC) + 60) /
+          1000, # in W-s
         # n.b. this is a reversible heat, causing the pack to heat somewhat
         # less when discharging at a given current than when charging at the
         # same rate.
 
-        est_entropic_heating_alt =
-          delta_t *
-          pack_amps *
-          (pack_avg_temp + 298.15) * (
-            - 0.07 -
-              graphite_entropy(cSOC) +
-              entropic_heat) /
-          1000, # in W-s
-        # the entropy change of the graphite anode is roughly 0.07 mV/K
-        # for SOC > 0.5, with an SOC-related variance of about 0.02 mV/K.
-        # our "entropic heat" parameter is intended to be the central
-        # tendency (to minimise the swing between the simple estimation
-        # and the SOC-related ones)
-
         # n.b. the sign of pack_amps is reversed from the convention in
-        # the technical literature
+        # the technical literature.
+
+        # we use an experimentally-derived entropy in an attempt to reduce the
+        # variance of estimation.  The entropy change of the graphite anode is
+        # roughly -60 mV/K at SOC == 0.5, with an SOC-related variance of about
+        # 20 mV/K.  We offset the cSOC-derived entropy by 60 so that the value
+        # of the entropic_heat parameter is a mid-SOC level that is "adjusted"
+        # for SOC.
 
         # n.b. the entropy change of an NMC cathode is dependent on its
         # NMC ratios, its doping, and the electrolyte; and may be quite
@@ -770,15 +802,17 @@ predict_temp <- function(tmodel = NULL,
         # their thermal evolution might be confidently attributed to an
         # extraordinarily-large entropic heating or cooling.
 
-        est_entropic_heating_alt_alt =
+        est_entropic_heating_alt =
           delta_t *
           pack_amps *
-          (pack_avg_temp + 298.15) * (
-            - 0.07 -
-              graphite_entropy(est_soc) +
-              entropic_heat) /
-          1000,
-        # in W-s
+          (pack_avg_temp + 298.15) * (entropic_heat +
+                                        graphite_entropy(est_soc) + 60) /
+          1000, # in W-s, using est_soc rather than cSOC
+
+        est_entropic_heating_alt_alt =
+          delta_t *
+          pack_amps * (pack_avg_temp + 298.15) * entropic_heat / 1000,
+        # in Ws, with no SOC "correction" to the entropic factor.
 
         cooling_power = 50 * est_pwr_a_c_50w - fan_power,
         cooling_power = ifelse(cooling_power < 0, 0, cooling_power),
@@ -931,16 +965,17 @@ predict_temp <- function(tmodel = NULL,
           mean(logtibble$unattributed_amperage[from_idx:to_idx] *
                  logtibble$unattributed_amperage[from_idx:to_idx],
                na.rm = T)
-        cat(paste0("Total heating =", round(interval_total_heating, 0),
+        cat(paste0("Total heating in window = ",
+                   round(interval_total_heating, 0),
             " kWh. ",
             round(interval_Joule_heating_kWh /
-                    interval_total_heating * 100, 1),
+                    interval_total_heating * 100, 3),
             "% Joule heat + ",
             round(interval_entropic_heating_kWh /
-                    interval_total_heating * 100, 1),
+                    interval_total_heating * 100, 3),
             "% entropic heat + ",
             round(interval_polarisation_heating_kWh /
-                    interval_total_heating * 100, 1),
+                    interval_total_heating * 100, 3),
             "% polarisation heat\n"))
         cat("Mean unattributed amperage:",
             round(interval_mean_unattributed_amperage, 1),

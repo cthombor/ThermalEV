@@ -28,10 +28,12 @@
 graphite_entropy <- function(SOC = 0.5, source = "Chen") {
   if (source == "Chen") {
     sfsmisc::polyn.eval(c(-0.1008, 0.2762, -3.4301, 19.7009, -59.77425,
-                          111.39549, -127.9796, 81.462, -21.624),
+                          111.39549, -127.9796, 81.462, -21.624)
+                        * 1000,
                         SOC)
   } else if (source == "Mei") {
-    sfsmisc::polyn.eval(c(-0.64816, 4.34612, -8.05595, 4.44722),
+    sfsmisc::polyn.eval(c(-0.64816, 4.34612, -8.05595, 4.44722)
+                        * 1000,
                         SOC)
   }
 }

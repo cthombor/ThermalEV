@@ -1,15 +1,5 @@
 #' revise_ocv: refine an ocv_tbl, using predictions from predict_temp().
-#' Displays a scatterplot, if trace > S0.  n.b. the ocv_tbl is used to
-#' estimate entropic (reversible) heat generation, by lookup from the
-#' LeafSpy-reported soc.  This soc is quite different to the cell-manufacturer's
-#' soc, because it has a 0 at the vehicle-turtle level of "reserve" capacity
-#' in the pack, rather than at the lower limit of the cell operating voltage.
-#' This results in a very steep rise in OCV at small values of SOC in an
-#' ocv_tbl (default: from the cell manufacturer) that is revised to align
-#' with an soc that is estimated by a BMS in a Nissan EV.
-#'
-#' @examples
-#' m <- revise_ocv(eNV50kWh)
+#' Displays a scatterplot, if trace > S0.
 #'
 #' @param m a thmodel
 #' @param wonky_threshold in volts, outlier criterion (default 70)
@@ -44,15 +34,9 @@ revise_ocv <- function(m,
   stopifnot(class(m) == "thmodel")
   ot <- m$parameters$ocv_tbl
   ld <- m$logdata
-  stopifnot(is.element("est_ocv_from_overvoltage", names(ld)))
-  # n.b. the current version of predict_temp() computes this estimate from
-  # pack_volts, pack_amps, the Tafel parameters, estimated temperature and
-  # packr.  If a thmodel lacks this column in its logdata, then it may have
-  # been created by a prior version of this package and lack a full set
-  # of parameters for the current version.
 
   wonky <- (abs(ld$pack_volts -350) > wonky_threshold)
-  missings <- is.na(ld$est_ocv_from_overvoltage) | is.na(ld$ssoc)
+  missings <- is.na(ld$est_ocv_from_pack_behaviour) | is.na(ld$cSOC)
   unreliable <- ld$segnum == 0 # short sequences
   high_amps <- abs(ld$pack_amps) > max_C * m$capacity / 0.375
   min_temp <- if (is.null(from_temp)) -30 else from_temp
@@ -60,20 +44,21 @@ revise_ocv <- function(m,
   extreme_temps <- (ld$pack_avg_temp < min_temp) | (ld$pack_avg_temp > max_temp)
   min_soc <- if (is.null(from_soc)) 0.0 else from_soc
   max_soc <- if (is.null(to_soc)) 1.0 else to_soc
-  extreme_est_socs <- (ld$est_ssoc < min_soc) | (ld$est_ssoc > max_soc)
+  extreme_socs <- (ld$cSOC < min_soc) |
+    (ld$cSOC > max_soc)
 
   if (trace > 0) {
     cat("est_ocv: filtering out",
         sum(high_amps, na.rm = TRUE), "high-amp records,",
         sum(extreme_temps, na.rm = TRUE), "extreme-temp records,",
-        sum(extreme_est_socs, na.rm = TRUE), "extreme-est-soc records,",
+        sum(extreme_socs, na.rm = TRUE), "extreme-soc records,",
         sum(missings, na.rm = TRUE), "incomplete records,",
         sum(unreliable, na.rm = TRUE), "unreliable records, and",
         sum(wonky, na.rm = TRUE), "wonky lines of data\n")
   }
   ld <- ld |> filter_out(high_amps |
                            extreme_temps |
-                           extreme_est_socs |
+                           extreme_socs |
                            missings |
                            unreliable |
                            wonky)
@@ -82,59 +67,25 @@ revise_ocv <- function(m,
   }
   stopifnot(nrow(ld) > 0)
 
-  sloper <- (m$parameters$packr85 - m$parameters$effective_pack_resistance) / 15
-
   ld <- ld |>
     mutate(
       delta_t = date_time - dplyr::lag(date_time),
-      eff_packr_2 = ifelse(
-        ssoc <= 0.70,
-        m$parameters$effective_pack_resistance,
-        m$parameters$effective_pack_resistance + sloper * (ssoc - 0.70)
-      ) *
+      eff_packr_corr =
+        m$parameters$effective_pack_resistance *
         exp(m$parameters$arrhenius_resistance *
               (1 / 298.15 - 1 / (pack_avg_temp + 273.15))) / (hx / 100),
-      #n.b. we use measured temp and hx, not predictions as in predict_temp
-      tafel_slope_adj_2 = m$parameters$tafel_slope *
-        exp(m$parameters$arrhenius_tafel *
-              ((1 / 298.15) - (1 / (pack_avg_temp + 273.15))))
-      #TODO: explore the sensitivity of tafel_slope_adj to hx
+      #n.b. we use the measured temp and hx, not predictions as in predict_temp
     )
 
   # we use segments as defined in predict_temp()
-  for (i in unique(ld$segnum)) {
-    smask <- (ld$segnum == i)
-    ia <- ld$pack_amps[smask] # instantaneous amperage
-    ts <- ld$tafel_slope_adj_2
-    pi <- m$parameters$polarisation_irr
-    iv <- -sign(ia) * exp(ts * log(abs(ia))) * (pi / 1000)
-    # n.b. resistances are in mOhms.  pack_amps is negative when charging.
-    # iv is a cathodic overvoltage (eta) estimated by a Tafel model
-
-    # TODO: add an ohmic (charge-transfer) estimation for small
-    # abs(ia), perhaps scaled from packr, to the time-averaged response?
-
-    # TODO: are overvoltages diffusion-limited at large abs(ia)?  See
-    # https://doi.org/10.1021/acs.jpcc.9b06820
-    lambda <- ld$EMA_parameter_polarisation[[first(which(smask))]] # per-segment
-    ov <- stats::filter(
-      iv, # impulse voltages
-      filter = c(1 - lambda), # Poisson's recursive exponential window function
-      method = "recursive",
-      init = iv[[1]]
-    )
-    ld$est_overvoltage_2[smask] <- ov
-  }
-
   ld <- ld |>
     group_by(segnum) |>
     mutate(
-      est_ocv_from_overvoltage_2 = pack_volts - est_overvoltage_2 +
-        pack_amps * eff_packr_2 / 1000
-      # TODO: we assume our Joule-heating parameter has a very short time
-      # constant in its ohmic effect on the pack voltage.  Is this valid?
+      est_ocv_from_pack_behaviour_2 = est_ocv_from_pack_behaviour -
+        est_Joule_heating_amperage * (eff_packr_corr - eff_packr) / 1000
+      # this should be a more accurate estimate, because it uses measured temps
     ) |>
-    arrange(ssoc, est_ocv_from_overvoltage_2)
+    arrange(cSOC, est_ocv_from_pack_behaviour_2)
 
   min_Hx <- round(min(ld$hx), 0)
   max_Hx <- round(max(ld$hx), 0)
@@ -153,63 +104,58 @@ revise_ocv <- function(m,
   }
 
   #enforce monotonicity in ocv table, using a least-squares fit
-  ir <- isoreg(x = ld$ssoc, y = ld$est_ocv_from_overvoltage_2)
-  if (trace > 1) plot(ir, xlab = "SOC", ylab = "OCV")
+  ir1 <- stats::as.stepfun(
+    stats::isoreg(
+      x = ld$ssoc, y = ld$est_ocv_from_pack_behaviour_2))
+  if (trace > 1) plot(ir1, xlab = "SOC", ylab = "OCV")
 
   # build new ocv_tbl, retaining extremal values from the current ocv_tbl
-  newt <- tibble(SOC = ir$x[ir$iKnots],
-                 OCV = ir$yf[ir$iKnots])
+  newt <- tibble(SOC = knots(ir1),
+                 OCV = ir1(SOC))
   otlo <- filter(ot,
-                 SOC < ir$x[[dplyr::first(ir$iKnots)]],
-                 OCV < ir$yf[[dplyr::first(ir$iKnots)]])
+                 SOC < dplyr::first(newt$SOC),
+                 OCV < dplyr::first(newt$OCV))
   othi <- filter(ot,
-                 SOC > ir$x[[dplyr::last(ir$iKnots)]],
-                 OCV > ir$yf[[dplyr::last(ir$iKnots)]])
+                 SOC > dplyr::last(newt$SOC),
+                 OCV > dplyr::last(newt$OCV))
   newt <- rbind(otlo, newt, othi)
 
   # sanity check on SOC values
-  # n.b. the SOC in a LeafSpy log is an estimate.  I doubt it's ever > 100%. Its
-  # lower limit seems to be somewhat above 10% (as per a cell-manufacturer's
-  # datasheet), providing a safety margin for a turtled pack not becoming
-  # bricked through self-discharge before it is trickle-charged back onto its
-  # feet.
-  stopifnot(min(newt[,"SOC"]) >= 0 || max(newt[,"SOC"]) <= 1.0)
-
-  # convert newt into a table mapping SOC -> OCV, for use in approxfun()
-  newt <- newt |>
-    group_by(SOC) |>
-    summarise(OCV = mean(OCV)) |>
-    ungroup() |>
-    arrange(SOC)
+  stopifnot(min(newt[,"SOC"]) >= 0.0 || max(newt[,"SOC"]) <= 1.0)
+  stopifnot(min(newt$SOC - dplyr::lag(newt$SOC), na.rm = TRUE) > 0)
+  stopifnot(min(newt$OCV - dplyr::lag(newt$OCV), na.rm = TRUE) >= 0)
+  # n.b. the SOC in a LeafSpy log is an estimate.  I doubt it ever exceeds 100%,
+  # but I'm programming defensively to prevent such out-of-band values creeping
+  # into the ocv_tbl.  I also doubt the SOC will ever drop below 0%, as that
+  # would (presumably) be an estimated OCV below the cell-manufacturer's lower
+  # operating limit, likely to cause severe damage if the cell is sourcing any
+  # current.  Indeed: the lower operating limit for SOC in a Nissan EV seems to
+  # be 10%, which presumably is introduced as a safety margin to allow a turtled
+  # EV to survive for at least a few days (despite self-discharge) before it is
+  # put onto a resuscitating regime of a trickle-charge.
 
   #run isoreg "in the other direction", to estimate its bias
   ld <- ld |> mutate(
-    sod = 1 - ssoc # "state of discharge"
+    sod = 1 - cSOC # "state of discharge"
   ) |>
     arrange(sod)
-  ir2 <- isoreg(x = ld$sod, y = - ld$est_ocv_from_overvoltage_2)
-  if (trace > 1) plot(ir2, xlab = "SOD", ylab = "-OCV")
+  ir2 <- stats::as.stepfun(
+    stats::isoreg(x = ld$sod, y = - ld$est_ocv_from_pack_behaviour_2))
 
-  # build new ocv_tbl, retaining extremal values from the current ocv_tbl
-  newt2 <- tibble(SOC = 1 - ir2$x[ir2$iKnots],
-                  OCV = - ir2$yf[ir2$iKnots])
-  otlo2 <- dplyr::filter(ot,
-                  SOC < 1 - ir2$x[[last(ir2$iKnots)]],
-                  OCV < - ir2$yf[[last(ir2$iKnots)]])
-  othi2 <- dplyr::filter(ot,
-                  SOC > 1 - ir2$x[[dplyr::first(ir2$iKnots)]],
-                  OCV > - ir2$yf[[dplyr::first(ir2$iKnots)]])
-  newt2 <- rbind(otlo2, newt2, othi2)
-
-  # sanity check on SOC values
-  stopifnot(min(newt2[,"SOC"]) >= 0 || max(newt2[,"SOC"]) <= 1.0)
-
-  # convert newt2 into a table mapping SOC -> OCV, for use in approxfun()
-  newt2 <- newt2 |>
-    group_by(SOC) |>
-    summarise(OCV = mean(OCV)) |>
-    ungroup() |>
+  newt2 <- tibble(SOC = 1 - knots(ir2),
+                 OCV = - ir2(1 - SOC)) |>
     arrange(SOC)
+  otlo <- filter(ot,
+                 SOC < dplyr::first(newt2$SOC),
+                 OCV < dplyr::first(newt2$OCV))
+  othi <- filter(ot,
+                 SOC > dplyr::last(newt2$SOC),
+                 OCV > dplyr::last(newt2$OCV))
+  newt2 <- rbind(otlo, newt2, othi)
+
+  stopifnot(min(newt2[,"SOC"]) >= 0.0 || max(newt2[,"SOC"]) <= 1.0)
+  stopifnot(min(newt2$SOC - dplyr::lag(newt2$SOC), na.rm = TRUE) > 0)
+  stopifnot(min(newt2$OCV - dplyr::lag(newt2$OCV), na.rm = TRUE) >= 0)
 
   # compute the mean of ocv predictions from newt and newt2
   otf <- approxfun(newt, method = "linear", rule = 2)
@@ -222,13 +168,13 @@ revise_ocv <- function(m,
   }
   # let's try loess()
   ld <- ld |> mutate(
-    jsoc = jitter(ssoc, 0.0001)) # jitter to avoid ties
+    jsoc = jitter(cSOC, 0.0001)) # jitter to avoid ties
   if (methodology == "loess-sym") {
     # this may produce a better fit if there are outliers
-    otf4 <- loess(ld$est_ocv_from_overvoltage_2 ~ jsoc,
+    otf4 <- loess(ld$est_ocv_from_pack_behaviour_2 ~ jsoc,
                   ld, family = "symmetric")
   } else {
-    otf4 <- loess(ld$est_ocv_from_overvoltage_2 ~ jsoc, ld)
+    otf4 <- loess(ld$est_ocv_from_pack_behaviour_2 ~ jsoc, ld)
   }
   socv <- c(0:(tbl_size - 1)) / rep(tbl_size - 1, tbl_size)
   predv <- predict(otf4, data.frame(jsoc = socv))
@@ -250,9 +196,9 @@ revise_ocv <- function(m,
 
   # now let's try centred isotonic regression
   if (methodology == "cir") {
-    # the following throws a mysterious error -- possibly because it
-    # can't handle this many points?
-    dr <- cir::doseResponse(x = ld$jsoc, y = ld$est_ocv_from_overvoltage_2)
+    # TODO: repair this code, which throws a mysterious error -- possibly
+    # because cir::doseResponse() can't handle this many points?
+    dr <- cir::doseResponse(x = ld$jsoc, y = ld$est_ocv_from_pack_behaviour_2)
     ir5 <- cir::cirPAVA(dr)
     if (trace > 1) plot(ir5, xlab = "SOC", ylab = "OCV")
     newt5 <- tibble(SOC = ir5$x,
@@ -286,32 +232,36 @@ revise_ocv <- function(m,
     }
     e <-
       ggplot() +
-      geom_line(data = newtf, aes(x = SOC, y = OCV), colour = "orange") +
-      geom_line(data = newt2f, aes(x = SOC, y = OCV), colour = "red") +
-      geom_line(data = newt3f, aes(x = SOC, y = OCV), colour = "green") +
-      geom_line(data = newt4f, aes(x = SOC, y = OCV), colour = "blue") +
       if (show_gids)
         geom_point(data = ld, aes(
-          x = ssoc,
+          x = cSOC,
           y = pack_volts,
           colour = gids
         ))
     else
       geom_point(data = ld, aes(
-        x = ssoc,
+        x = cSOC,
         y = pack_volts,
         colour = abs(pack_amps)
       ))
+
     if (methodology == "cir") {
       e <- e +
         geom_line(data = newt5f, aes(x = SOC, y = OCV), colour = "violet")
     }
 
-    plot(e +
-      theme(palette.colour.continuous = "Okabe-Ito") +
+    plot(
+      e +
+        geom_line(data = ot, aes(x = SOC, y = OCV),colour = "black",
+          linetype = "dashed") +
+        geom_line(data = newtf, aes(x = SOC, y = OCV), colour = "orange") +
+        geom_line(data = newt2f, aes(x = SOC, y = OCV), colour = "red") +
+        geom_line(data = newt3f, aes(x = SOC, y = OCV), colour = "green") +
+        geom_line(data = newt4f, aes(x = SOC, y = OCV), colour = "blue") +
+        theme(palette.colour.continuous = "Okabe-Ito") +
       labs(,
-        x = "SOC",
-        y = "Pack Volts",
+        x = "SOC from GIDs",
+        y = "Estimated OCV",
         title = paste0(
           m$name,
           ": ", min_date,
@@ -346,7 +296,8 @@ revise_ocv <- function(m,
     )
   }
 
-  m$ocv_tbl <- if (methodology == "isoreg") newt3 else
+  m$parameters$prev_ocv_tbl <- ot
+  m$parameters$ocv_tbl <- if (methodology == "isoreg") newt3 else
     if (methodology == "cir") newt5 else newt4
 
   # retval: a thmodel with recomputed predictions
