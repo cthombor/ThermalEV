@@ -3,14 +3,7 @@
 \name{revise_ocv}
 \alias{revise_ocv}
 \title{revise_ocv: refine an ocv_tbl, using predictions from predict_temp().
-Displays a scatterplot, if trace > S0.  n.b. the ocv_tbl is used to
-estimate entropic (reversible) heat generation, by lookup from the
-LeafSpy-reported soc.  This soc is quite different to the cell-manufacturer's
-soc, because it has a 0 at the vehicle-turtle level of "reserve" capacity
-in the pack, rather than at the lower limit of the cell operating voltage.
-This results in a very steep rise in OCV at small values of SOC in an
-ocv_tbl (default: from the cell manufacturer) that is revised to align
-with an soc that is estimated by a BMS in a Nissan EV.}
+Displays a scatterplot, if trace > S0.}
 \usage{
 revise_ocv(
   m,
@@ -54,17 +47,8 @@ a thmodel with an updated ocv_tbl and predictions
 }
 \description{
 revise_ocv: refine an ocv_tbl, using predictions from predict_temp().
-Displays a scatterplot, if trace > S0.  n.b. the ocv_tbl is used to
-estimate entropic (reversible) heat generation, by lookup from the
-LeafSpy-reported soc.  This soc is quite different to the cell-manufacturer's
-soc, because it has a 0 at the vehicle-turtle level of "reserve" capacity
-in the pack, rather than at the lower limit of the cell operating voltage.
-This results in a very steep rise in OCV at small values of SOC in an
-ocv_tbl (default: from the cell manufacturer) that is revised to align
-with an soc that is estimated by a BMS in a Nissan EV.
+Displays a scatterplot, if trace > S0.
 }
 \examples{
-m <- revise_ocv(eNV50kWh)
-
 m <- revise_ocv(eNV50kWh)
 }

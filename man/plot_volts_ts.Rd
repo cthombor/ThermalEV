@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_volts_ts.R
 \name{plot_volts_ts}
 \alias{plot_volts_ts}
-\title{plot_volts_ts: plot time-series of pack_volts, pred_pack_volts_from_soc}
+\title{plot_volts_ts: plot time-series of pack_volts, est_ocv}
 \usage{
 plot_volts_ts(
   m,
@@ -17,7 +17,7 @@ plot_volts_ts(
 )
 }
 \arguments{
-\item{m}{a thmodel with predictions from predict_volts_tafel()}
+\item{m}{a thmodel}
 
 \item{from_date}{starting date/time}
 
@@ -33,8 +33,8 @@ plot_volts_ts(
 a ggplot() environment
 }
 \description{
-plot_volts_ts: plot time-series of pack_volts, pred_pack_volts_from_soc
+plot_volts_ts: plot time-series of pack_volts, est_ocv
 }
 \examples{
-plot_volts_ts(predict_volts_tafel(eNV50kWh))
+plot_volts_ts(eNV50kWh, from_date="2026-03-13 16:00", to_date="2026-03-14")
 }

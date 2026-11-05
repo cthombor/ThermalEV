@@ -33,10 +33,15 @@ revise_ocv <- function(m,
 
   stopifnot(class(m) == "thmodel")
   ot <- m$parameters$ocv_tbl
+  m$parameters$prev_ocv_tbl <- ot
+  ot <- mutate(ot,
+               DVDJ = NULL,
+               DVDC = NULL)
   ld <- m$logdata
 
   wonky <- (abs(ld$pack_volts -350) > wonky_threshold)
-  missings <- is.na(ld$est_ocv_from_pack_behaviour) | is.na(ld$cSOC)
+  missings <- is.na(ld$est_ocv_from_pack_behaviour) | is.na(ld$lSOC) |
+    is.na(ld$eff_packr)
   unreliable <- ld$segnum == 0 # short sequences
   high_amps <- abs(ld$pack_amps) > max_C * m$capacity / 0.375
   min_temp <- if (is.null(from_temp)) -30 else from_temp
@@ -44,11 +49,11 @@ revise_ocv <- function(m,
   extreme_temps <- (ld$pack_avg_temp < min_temp) | (ld$pack_avg_temp > max_temp)
   min_soc <- if (is.null(from_soc)) 0.0 else from_soc
   max_soc <- if (is.null(to_soc)) 1.0 else to_soc
-  extreme_socs <- (ld$cSOC < min_soc) |
-    (ld$cSOC > max_soc)
+  extreme_socs <- (ld$lSOC < min_soc) |
+    (ld$lSOC > max_soc)
 
   if (trace > 0) {
-    cat("est_ocv: filtering out",
+    cat("revise_ocv: filtering out",
         sum(high_amps, na.rm = TRUE), "high-amp records,",
         sum(extreme_temps, na.rm = TRUE), "extreme-temp records,",
         sum(extreme_socs, na.rm = TRUE), "extreme-soc records,",
@@ -85,7 +90,7 @@ revise_ocv <- function(m,
         est_Joule_heating_amperage * (eff_packr_corr - eff_packr) / 1000
       # this should be a more accurate estimate, because it uses measured temps
     ) |>
-    arrange(cSOC, est_ocv_from_pack_behaviour_2)
+    arrange(lSOC, est_ocv_from_pack_behaviour_2)
 
   min_Hx <- round(min(ld$hx), 0)
   max_Hx <- round(max(ld$hx), 0)
@@ -106,7 +111,7 @@ revise_ocv <- function(m,
   #enforce monotonicity in ocv table, using a least-squares fit
   ir1 <- stats::as.stepfun(
     stats::isoreg(
-      x = ld$ssoc, y = ld$est_ocv_from_pack_behaviour_2))
+      x = ld$lSOC, y = ld$est_ocv_from_pack_behaviour_2))
   if (trace > 1) plot(ir1, xlab = "SOC", ylab = "OCV")
 
   # build new ocv_tbl, retaining extremal values from the current ocv_tbl
@@ -136,7 +141,7 @@ revise_ocv <- function(m,
 
   #run isoreg "in the other direction", to estimate its bias
   ld <- ld |> mutate(
-    sod = 1 - cSOC # "state of discharge"
+    sod = 1 - lSOC # "state of discharge"
   ) |>
     arrange(sod)
   ir2 <- stats::as.stepfun(
@@ -168,7 +173,7 @@ revise_ocv <- function(m,
   }
   # let's try loess()
   ld <- ld |> mutate(
-    jsoc = jitter(cSOC, 0.0001)) # jitter to avoid ties
+    jsoc = jitter(lSOC, 0.0001)) # jitter to avoid ties
   if (methodology == "loess-sym") {
     # this may produce a better fit if there are outliers
     otf4 <- loess(ld$est_ocv_from_pack_behaviour_2 ~ jsoc,
@@ -234,13 +239,13 @@ revise_ocv <- function(m,
       ggplot() +
       if (show_gids)
         geom_point(data = ld, aes(
-          x = cSOC,
+          x = lSOC,
           y = pack_volts,
           colour = gids
         ))
     else
       geom_point(data = ld, aes(
-        x = cSOC,
+        x = lSOC,
         y = pack_volts,
         colour = abs(pack_amps)
       ))
@@ -260,7 +265,7 @@ revise_ocv <- function(m,
         geom_line(data = newt4f, aes(x = SOC, y = OCV), colour = "blue") +
         theme(palette.colour.continuous = "Okabe-Ito") +
       labs(,
-        x = "SOC from GIDs",
+        x = "SOC from LeafSpy",
         y = "Estimated OCV",
         title = paste0(
           m$name,
@@ -296,9 +301,9 @@ revise_ocv <- function(m,
     )
   }
 
-  m$parameters$prev_ocv_tbl <- ot
-  m$parameters$ocv_tbl <- if (methodology == "isoreg") newt3 else
+  ot <- if (methodology == "isoreg") newt3 else
     if (methodology == "cir") newt5 else newt4
+  m$parameters$ocv_tbl <- add_dvdj_to_ocv_tbl(ot)
 
   # retval: a thmodel with recomputed predictions
   predict_temp(m, trace = trace)

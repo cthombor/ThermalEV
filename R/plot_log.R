@@ -76,7 +76,9 @@ plot_log <- function(m,
              'elv/10',
              kWh_remaining,
              temp,
-             'tdiff*10'
+             'tdiff*10',
+             hx,
+             soh
       ) |>
       xts::as.xts()
   } else if (max(x$distance, na.rm = TRUE) < 1500) {
@@ -87,7 +89,9 @@ plot_log <- function(m,
              'elv/10',
              kWh_remaining,
              temp,
-             'tdiff*10'
+             'tdiff*10',
+             hx,
+             soh
       ) |>
       xts::as.xts()
   } else {
@@ -98,7 +102,9 @@ plot_log <- function(m,
              'elv/10',
              kWh_remaining,
              temp,
-             'tdiff*10'
+             'tdiff*10',
+             hx,
+             soh
       ) |>
       xts::as.xts()
   }

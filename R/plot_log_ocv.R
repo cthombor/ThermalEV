@@ -1,4 +1,4 @@
-#' plot_log_ocv: plots pack_volts-est_ocv, pack_amps, soc
+#' plot_log_ocv: plots pack_volts, est_overvoltage, pack_amps, soc
 #'
 #' @param m a thmodel
 #' @param from_date starting date/time

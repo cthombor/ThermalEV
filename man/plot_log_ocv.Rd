@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_log_ocv.R
 \name{plot_log_ocv}
 \alias{plot_log_ocv}
-\title{plot_log_ocv: plots pack_volts-est_ocv, pack_amps, soc}
+\title{plot_log_ocv: plots pack_volts, est_overvoltage, pack_amps, soc}
 \usage{
 plot_log_ocv(m, from_date = NULL, to_date = NULL)
 }
@@ -17,7 +17,7 @@ plot_log_ocv(m, from_date = NULL, to_date = NULL)
 an Environment
 }
 \description{
-plot_log_ocv: plots pack_volts-est_ocv, pack_amps, soc
+plot_log_ocv: plots pack_volts, est_overvoltage, pack_amps, soc
 }
 \examples{
 plot_log_ocv(predict_temp())

@@ -7,16 +7,17 @@
 predict_temp(
   tmodel = NULL,
   effective_pack_resistance = NA,
+  arrhenius_resistance = NA,
   entropic_heat = NA,
-  polarisation_irr = NA,
-  tafel_slope = NA,
-  lambda_polarisation = NA,
-  arrhenius_tafel = NA,
+  polarisation_Rp = NA,
+  polarisation_R2 = NA,
+  lambda1_polarisation = NA,
+  lambda2_polarisation = NA,
   lambda_module_to_ambient = NA,
   lambda_module_AC_to_ambient = NA,
   fan_power = NA,
   COP = NA,
-  arrhenius_resistance = NA,
+  arrhenius_R2 = NA,
   heat_capacity = NA,
   gids_reserve = NA,
   ocv_tbl = NULL,
@@ -34,17 +35,19 @@ predict_temp(
 \arguments{
 \item{tmodel}{a thmodel, or a csv from LeafSpy (default: log26Jan2026.csv)}
 
-\item{effective_pack_resistance}{in mOhms at 298.15K}
+\item{effective_pack_resistance}{in mOhms at 298.15K, == R1 + Rp}
 
-\item{entropic_heat}{in kJ/V, reversible (entropic) heat}
+\item{arrhenius_resistance, }{Arrhenius coefficient for R1 + Rp}
 
-\item{polarisation_irr}{in mA, baseline exchange current (in a Tafel model)}
+\item{entropic_heat}{in mV/K, reversible (entropic) heat}
 
-\item{tafel_slope}{large-C polarisation response}
+\item{polarisation_Rp}{in mOhms at 298.15K}
 
-\item{lambda_polarisation}{in s, decay rate of tafel polarisation}
+\item{polarisation_R2}{in mOhms at 298.15K}
 
-\item{arrhenius_tafel}{in K, Arrhenius coefficient for tafel_slope}
+\item{lambda1_polarisation}{in s, decay rate of non-Faradaic polarisation}
+
+\item{lambda2_polarisation}{in s, decay rate of Faradaic polarisation}
 
 \item{lambda_module_to_ambient}{in hours}
 
@@ -54,13 +57,13 @@ predict_temp(
 
 \item{COP}{dimensionless}
 
-\item{arrhenius_resistance}{in K, temperature dependence of packr}
+\item{arrhenius_R2, }{Arrhenius coefficient for R2}
 
 \item{heat_capacity}{in kJ/K}
 
 \item{gids_reserve}{dimensionless, gids available at lSOC == 0}
 
-\item{ocv_tbl}{maps cSOC onto OCV, a 2-column tibble}
+\item{ocv_tbl}{maps lSOC or est_soc onto OCV, a 2-column tibble}
 
 \item{iter_count}{may be increased for a more accurate prediction}
 
@@ -101,13 +104,6 @@ modelling parameters used for its updated temperature predictions.
 Initial estimates of parameters are hardcoded in default_params().
 
 lSOC is the LeafSpy-reported soc, scaled by 1e6 to be in the range 0 to 1
-
-cSOC is computed from gids.  It has a value that is offset from lSOC in the
-50kWh pack by approximately 0.14 (when SOH=100), to account for the
-gids_reserve in the pack at lSOC == 0.0, and with a scaling of lSOC by about
-0.86 so that cSOC == lSOC == 1.0 at the maximum operating voltage for a cell
-(as disclosed by its manufacturer's spec sheet) and at the soc == 1e6 maximum
-value for this LeafSpy-reported estimate of the pack's available energy.
 }
 \examples{
 m <- predict_temp()

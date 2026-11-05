@@ -1,4 +1,4 @@
-#' plot_volts_ts: plot time-series of pack_volts, est_ocv_from_cSOC
+#' plot_volts_ts: plot time-series of pack_volts, est_ocv
 
 #' @param m a thmodel
 #' @param from_date starting date/time
@@ -11,7 +11,7 @@
 #' @export
 #'
 #' @examples
-#' plot_volts_ts(predict_volts_tafel(eNV50kWh))
+#' plot_volts_ts(eNV50kWh, from_date="2026-03-13 16:00", to_date="2026-03-14")
 plot_volts_ts <- function(m,
                      from_date = NULL,
                      to_date = NULL,
@@ -44,7 +44,7 @@ plot_volts_ts <- function(m,
 
   missings <- is.na(pd$gids) |
     is.na(pd$soc) |
-    is.na(pd$est_ocv_from_cSOC) |
+    is.na(pd$est_ocv) |
     is.na(pd$est_overvoltage) |
     is.na(pd$pack_avg_temp) |
     is.na(pd$pack_amps) |
@@ -68,10 +68,10 @@ plot_volts_ts <- function(m,
       else
         pack_volts - 350,
       #TODO: if volts_per_cell, change names so the legend isn't misleading
-      'ocv_from_cSOC - 350' = if (volts_per_cell)
-        (est_ocv_from_cSOC - 350) / 96
+      'Est. OCV - 350' = if (volts_per_cell)
+        (est_ocv - 350) / 96
       else
-        est_ocv_from_cSOC - 350,
+        est_ocv - 350,
       amps = if (volts_per_cell)
         pack_amps / 96
       else
@@ -80,17 +80,21 @@ plot_volts_ts <- function(m,
         est_overvoltage * 10 / 96
       else est_overvoltage * 10
     )
-  cat("Summary of cSOC:\n")
-  print(summary(pd$cSOC))
-  cat("Summary of estimated cSOC from overvoltage:\n")
-  print(summary(pd$est_ocv_from_cSOC))
+  cat("Summary of lSOC:\n")
+  print(summary(pd$lSOC))
+  cat("Summary of estimated OCV from lSOC:\n")
+  print(summary(pd$est_ocv_from_lSOC))
+  cat("Summary of estimated OCV from pack behaviour:\n")
+  print(summary(pd$est_ocv))
+  cat("Summary of est_soc:\n")
+  print(summary(pd$est_soc))
   cat("Summary of estimated pack overvoltage:\n")
   print(summary(pd$est_overvoltage))
 
   pd <- pd |>
     select(date_time,
          'volts - 350',
-         'ocv_from_cSOC - 350',
+         'Est. OCV - 350',
          amps,
          'est. overvoltage * 10'
   ) |>
