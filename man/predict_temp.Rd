@@ -21,6 +21,7 @@ predict_temp(
   heat_capacity = NA,
   gids_reserve = NA,
   ocv_tbl = NULL,
+  ocv_relax = 1,
   iter_count = 4,
   min_segment_length = 20,
   trace = 2,
@@ -64,6 +65,8 @@ predict_temp(
 \item{gids_reserve}{dimensionless, gids available at lSOC == 0}
 
 \item{ocv_tbl}{maps lSOC or est_soc onto OCV, a 2-column tibble}
+
+\item{ocv_relax}{may be increased, at risk of divergence}
 
 \item{iter_count}{may be increased for a more accurate prediction}
 

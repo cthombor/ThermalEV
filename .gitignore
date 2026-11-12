@@ -15,4 +15,5 @@
 /data/om*.rda
 /images
 .positai
-
+seg*.?.csv
+seg672.1.csv

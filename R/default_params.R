@@ -184,7 +184,7 @@ default_params <- function(m,
                        gids_reserve =
                          ifelse(m$capacity == 24, 40, 62.5),
                        ocv_tbl =
-                         add_dvdj_to_ocv_tbl(
+                         add_dvdq_to_ocv_tbl(
                            ot,
                            capacity_kWh = m$capacity,
                            capacity_Ah = 137 * m$capacity / 50,

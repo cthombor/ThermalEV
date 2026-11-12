@@ -171,7 +171,7 @@ fit_model_elec <- function(
     par = c(packr, rp, r2, lp1, lp2, eh),
     fn = fm,
     lower = c(if (fixed_parameters[1]) packr else 40,
-              if (fixed_parameters[2]) rp else 10,
+              if (fixed_parameters[2]) rp else 5,
               if (fixed_parameters[3]) r2 else 10,
               if (fixed_parameters[4]) lp1 else 15,
               if (fixed_parameters[5]) lp2 else 15,

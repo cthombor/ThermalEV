@@ -373,8 +373,8 @@ predict_temp <- function(tmodel = NULL,
                             method = "linear",
                             rule = 2)
 
-  f_ocv_to_dvdc <- approxfun(x = ocv_tbl$OCV,
-                             y = ocv_tbl$DVDC,
+  f_ocv_to_dvdq <- approxfun(x = ocv_tbl$OCV,
+                             y = ocv_tbl$DVDQ,
                              method = "linear",
                              rule = 2)
 
@@ -427,6 +427,10 @@ predict_temp <- function(tmodel = NULL,
     group_by(segnum) |>
     mutate(
       lSOC = soc / 1e6, # scale this 20-bit integer to a 0-1 range
+      delta_Q = (lSOC - lag(lSOC, default = first(lSOC))) *
+        (a_hr / 10000) *
+        3600, # delta of pack charge, in coulombs
+
       est_lSOC = SOC_reserve +
         SOC_usable * gids * 0.080 / (m$capacity * soh / 100),
       # est_lSOC is an attempt to mimic the computation soc by the OEM BMS for
@@ -458,7 +462,7 @@ predict_temp <- function(tmodel = NULL,
 
       est_ocv_from_lSOC = f_soc_to_ocv(lSOC),
       # est_ocv_delta = - pack_amps * sampling_interval *
-      #   f_ocv_to_dvdc(est_ocv_from_lSOC),
+      #   f_ocv_to_dvdq(est_ocv_from_lSOC),
       # n.b. this is very inaccurate when driving (due to high-freq spikes in
       # pack_amps and pack_volts which are unrecorded in the 15-sec samplings)
       est_ocv_delta = est_ocv_from_lSOC -
@@ -475,7 +479,7 @@ predict_temp <- function(tmodel = NULL,
 
       # est_ocv_from_pack_behaviour = pack_volts + cumsum(est_ocv_delta),
       # an alternative estimate, but relies heavily on a numerical
-      # integration of f_ocv_to_dvdc() and is heavily biased by
+      # integration of f_ocv_to_dvdq() and is heavily biased by
       # the starting pack_volts in each segment.
 
       # n.b. we rely on lSOC only to estimate the delta in OCV from coulombic
@@ -485,14 +489,18 @@ predict_temp <- function(tmodel = NULL,
       # polarisation currents.  Our initial estimate of ocv is based on a
       # counterfactual assumption of there being no polarisation currents.
 
-      est_Joule_heating_amperage = pack_amps,
-      # a first estimate, assuming no polarisation currents in an equivalent
-      # circuit (R1-(Rp//C1))//(R2-C2)
+      est_Joule_heating_amperage = delta_Q / sampling_interval,
+      # TODO: estimate the RMS of the charging current.  This is its mean,
+      # with ripples from the polarisation currents (which haven't yet
+      # been estimated).
+
+      # for an equivalent circuit (R1-(Rp//C1))//(R2-C2) ...
       est_polarisation_amperage_p = 0,
       # current attributed to a discharge or charge of C1
       est_polarisation_amperage_2 = 0,
       # current attributed to a discharge or charge of C2
-      est_voltage_C1 = - pack_amps * polarisation_Rp,
+      est_voltage_C1 =
+        - pack_amps * polarisation_Rp / effective_pack_resistance,
       # voltage drop across C1, assuming no polarisation current
 
       # n.b. currents which charge the pack are negative, by Nissan convention
@@ -591,10 +599,22 @@ predict_temp <- function(tmodel = NULL,
         ep2_tc = min(1.0, sampling_interval / l2_tc),
         # n.b. the effective resistance for lambda2_polarisation is r2
 
-        est_voltage_C1 = pack_volts - pack_amps * r1_tc / eff_packr_tc,
-        # temperature-corrected initial estimate for the voltage across C1
-        # TODO: delete this legacy code, after convergence is established
-        # for our simulation below.
+        delta_pack_amps = pack_amps -
+          lag(pack_amps, default = first(pack_amps)),
+        est_slope_pack_amps = (lead(pack_amps, default = last(pack_amps)) -
+          lag(pack_amps, default = first(pack_amps))) / 2,
+        # n.b. this estimate of the slope is unbiased by the second derivative
+        # of the sampled function
+
+        impulse_a = - (delta_Q / sampling_interval +
+                         pack_amps +
+                         est_slope_pack_amps / 2),
+        # charging amperage "between samples" i.e. the delta_Q unexplained by a
+        # numerical integration of the pack_amps timeseries (incl. a
+        # slope-correction).  impulse_a / 3 is thus an estimate of the second
+        # derivative of the pack_amps signal (with a timebase of
+        # sampling_interval), although it may well be too noisy to be useful in
+        # variance reduction of the predicted Joule heat.
 
         .before = pack_avg_temp
       ) |>
@@ -604,7 +624,13 @@ predict_temp <- function(tmodel = NULL,
       ia <- logtibble$pack_amps[wstart[i]:wend[i]] # instantaneous amperage
       iv <- logtibble$pack_volts[wstart[i]:wend[i]] # instantaneous voltage
 
-      si <- logtibble$sampling_interval[wstart[i]] # constant across a segment
+      si <- logtibble$sampling_interval[wstart[i]] # sampling interval, in s
+      dq <- logtibble$delta_Q[wstart[i]:wend[i]] # delta of pack-charge, in As
+      dpa <- logtibble$delta_pack_amps[wstart[i]:wend[i]]
+
+      impulse_a <- logtibble$impulse_a[wstart[i]:wend[i]]
+      impulse_q <- - impulse_a * si
+      # C2 charge attributed to unsampled spikes or valleys in pack_amps
 
       reff <- logtibble$eff_packr_tc[wstart[i]:wend[i]] / 1000
       r1 <- logtibble$r1_tc[wstart[i]:wend[i]] / 1000
@@ -622,10 +648,11 @@ predict_temp <- function(tmodel = NULL,
 
       # we copy into per-segment vectors, to aid debugging
       ocv <- logtibble$est_ocv_from_pack_behaviour[wstart[i]:wend[i]]
-      ocv_delta <- logtibble$est_ocv_delta[wstart[i]:wend[i]]
+      ocv_delta <- ocv - dplyr::lag(ocv, default = ocv[1]) +
+        logtibble$est_ocv_delta[wstart[i]:wend[i]]
 
       iac <- logtibble$est_Joule_heating_amperage[wstart[i]:wend[i]]
-      # estimated charging current, from prior iteration or initialisation
+      # estimated inst. charging current, from prior iteration or initialisation
 
       iap <- logtibble$est_polarisation_amperage_p[wstart[i]:wend[i]]
       ia2 <- logtibble$est_polarisation_amperage_2[wstart[i]:wend[i]]
@@ -660,79 +687,33 @@ predict_temp <- function(tmodel = NULL,
       # The low-pass EMA on ocv_prime is intended to filter out the voltage
       # perturbations arising from the polarisation currents.  This should be
       # an unbiased estimate, because the average of the polarisation currents
-      # tends toward zero.  For short-term perturbations, est_ocv_delta is
-      # our most accurate guide -- because lSOC has high resolution -- except
-      # on the rare occasions when lSOC is recalibrated.
-
-      # TODO: try scaling ep3 with iternum, to have a higher-pass
-      # filter as the iterative simulation (presumably!) converges
+      # tends toward zero.
 
       overvoltage <- iv - ocv_prime
 
-      # calculations for the R1-(Rp//C1) branch of the EC
-      iac_prime <- rep(NA, wend[i] - wstart[i] + 1)
-      iv1_prime <- rep(NA, wend[i] - wstart[i] + 1)
-      iap_prime <- rep(NA, wend[i] - wstart[i] + 1)
-
-      Q1 <- rep(NA, wend[i] - wstart[i] + 1) # coulomb-counter on C1
-      # n.b. the above vectors are for debugging purposes only.  Our manual
-      # unwinding of an iterative solution of the state equations has five
-      # scalar loop-carried dependencies, as listed below.
-
-      # TODO: consider rewriting the scalar loops in C, for an efficient
-      # execution on the superscalar CPU used in contemporary laptop and
-      # desktop computers.
-      # DONE: The cost is 1 SMOP ("small matter of programming"), plus a
-      # significant loss in maintainability and readibility. The benefit is a
-      # more rapid execution of the simulation; but on my longest logfiles its
-      # performance is (barely) acceptable for repeated executions by a the
-      # nonlinear optimisation routine fit_model().  The cost thus greatly
-      # exceeds the benefits for this experimental code.
-
-      prev_iap <- 0 # we assume no polarisation currents at segment-starts
-      prev_iv1 <- - ia[1] * rp[1] / reff[1]
-      # (inferred) voltage across C1, with R1-Rp as a voltage divider of the
-      # "negative current" ia
-      prev_Q1 <- prev_iv1 * polarisation_C1
-      # n.b. C1 stores charge with the usual sign convention: Q1 = V1 * C1.
-
-      # n.b. Our prefix "i" is intended to connote "instantaneous".  Our
-      # prefix "prev_" is intended to connote a loop-carried dependency i.e. a
-      # value which was computed in the previous iteration of the loop (or
-      # in its initialisation), and which is updated in this iteration.
-
-      for (j in seq(1, wend[i] - wstart[i] + 1)) {
-        v1_zero <- - (ia[j] - ia2[j]) * rp[j] / reff[j]
-        delta_iv1 <- (v1_zero - prev_iv1) * ep1[j]
-        # iv1 relaxes toward v1_zero (reaching it if iap == 0)
-        prev_iv1 <- iv1_prime[j] <- prev_iv1 + delta_iv1
-        prev_iap <- iap_prime[j] <- - delta_iv1 * polarisation_C1 / si
-        prev_Q1 <- Q1[j] <- prev_Q1 - prev_iap * si
-        # n.b. the charge on Q1 is unknown at the start of a segment, but should
-        # converge on an accurate value as the polarisation currents and the
-        # estimaged overvoltage relax toward accurate values.  If prev_Q1 is
-        # nonconvergent (i.e. oscillating wildly) on a dataset, perhaps due to a
-        # sampling rate that's slower than the RC time constants in the EC, then
-        # subsampling and/or a few steps of a Newton-Raphson method might be
-        # sufficient to estimate convergent values for the polarisation
-        # currents.
-      }
-
       # calculations for the R2-C2 branch of the EC
+      iac_prime <- rep(NA, wend[i] - wstart[i] + 1)
       ia2_prime <- rep(NA, wend[i] - wstart[i] + 1)
       iv2_prime <- rep(NA, wend[i] - wstart[i] + 1)
       Q2 <- rep(NA, wend[i] - wstart[i] + 1) # coulomb-counter on C2
-      prev_ia2 <- 0
+      impulse_q2 <- impulse_q * ep2 / (ep1 + ep2) # impulse_q into C2
+      prev_ia2 <- impulse_q2[1] / si
       prev_iv2 <- ocv_prime[1]
-      prev_Q2 <- prev_iv2 * polarisation_C2
+      prev_Q2 <- prev_iv2 * polarisation_C2 + impulse_q2[1]
+      # TODO: analyse impulse_q to find an adequate heuristic for distinguishing
+      # a drift-correction from an unrecorded spike in pack current.
       for (j in seq(1, wend[i] - wstart[i] + 1)) {
         delta_iv2 <- (ocv_prime[j] + ocv_delta[j] - prev_iv2) * ep2[j]
-        # n.b. we make a high-frequency adjustment to our low-pass ocv estimate.
-        # ocv_delta is derived from the lSOC delta and ocv_tbl
-        prev_iv2 <- iv2_prime[j] <- prev_iv2 + delta_iv2
-        # iv2 relaxes toward the (currently estimated) OCV
-        prev_Q2 <- Q2[j] <- prev_Q2 + delta_iv2 * polarisation_C2
-        prev_ia2 <- ia2_prime[j] <- - delta_iv2 / r2[j]
+        # n.b. ocv_delta is a high-frequency adjustment to our low-pass ocv
+        # estimate.
+        prev_Q2 <- Q2[j] <- prev_Q2 +
+          delta_iv2 * polarisation_C2 +
+          impulse_q2[j]
+        prev_iv2 <- iv2_prime[j] <- prev_Q2 / polarisation_C2
+        #        prev_iv2 <- iv2_prime[j] <- prev_iv2 + delta_iv2
+        # iv2 relaxes toward the (currently estimated) OCV, disrupted by
+        # the high-frequency impulse_q
+        prev_ia2 <- ia2_prime[j] <- - delta_iv2 / r2[j] - impulse_q2[j] / si
         # n.b. negative (Nissan-convention) currents, inverting Ohm's Law
       }
       # TODO: consider replacing the scalar loop above with a call to the
@@ -759,8 +740,59 @@ predict_temp <- function(tmodel = NULL,
       # exponential smoothing method" of equation 1 in J. Forecast. 23, 385–404
       # (2004).
 
-      iac_prime <- ia - ia2_prime
-      # n.b. by Kirchhoff's first law, ia == iac + ia2
+      iac_prime <- ia - ia2_prime + impulse_a
+      # n.b. by Kirchhoff's first law, ia == iac + ia2. impulse_a is unmeasured
+      # at sampling times, but we're not subsampling in this simulation so
+      # we just add it here.  ia2_prime is net of the portion of the
+      # impulse_a which was absorbed by the R2-C2 branch of the EC.
+
+      # calculations for the R1-(Rp//C1) branch of the EC
+      iv1_prime <- rep(NA, wend[i] - wstart[i] + 1)
+      iap_prime <- rep(NA, wend[i] - wstart[i] + 1)
+
+      Q1 <- rep(NA, wend[i] - wstart[i] + 1) # coulomb-counter on C1
+      # n.b. the above vectors are for debugging purposes only.  Our manual
+      # unwinding of an iterative solution of the state equations has five
+      # scalar loop-carried dependencies, as listed below.
+
+      # TODO: consider rewriting the scalar loops in C, for an efficient
+      # execution on the superscalar CPU used in contemporary laptop and
+      # desktop computers.
+      # DONE: The cost is 1 SMOP ("small matter of programming"), plus a
+      # significant loss in maintainability and readibility. The benefit is a
+      # more rapid execution of the simulation; but on my longest logfiles its
+      # performance is (barely) acceptable for repeated executions by a the
+      # nonlinear optimisation routine fit_model().  The cost thus greatly
+      # exceeds the benefits for this experimental code.
+
+      prev_iap <- 0 # we assume no polarisation currents at segment-starts
+      prev_iv1 <- - iac_prime[1] * rp[1] / reff[1]
+      # (inferred) voltage across C1, with R1-Rp as a voltage divider of the
+      # "negative current" iac
+      prev_Q1 <- prev_iv1 * polarisation_C1
+      # n.b. C1 stores charge with the usual sign convention: Q1 = V1 * C1.
+
+      # n.b. Our prefix "i" is intended to connote "instantaneous".  Our
+      # prefix "prev_" is intended to connote a loop-carried dependency i.e. a
+      # value which was computed in the previous iteration of the loop (or
+      # in its initialisation), and which is updated in this iteration.
+
+      for (j in seq(1, wend[i] - wstart[i] + 1)) {
+        v1_zero <- - (ia[j] - ia2[j]) * rp[j] / reff[j]
+        delta_iv1 <- (v1_zero - prev_iv1) * ep1[j]
+        # iv1 relaxes toward v1_zero (reaching it if iap == 0)
+        prev_iv1 <- iv1_prime[j] <- prev_iv1 + delta_iv1
+        prev_iap <- iap_prime[j] <- - delta_iv1 * polarisation_C1 / si
+        prev_Q1 <- Q1[j] <- prev_Q1 - prev_iap * si
+        # n.b. the charge on Q1 is unknown at the start of a segment, but should
+        # converge on an accurate value as the polarisation currents and the
+        # estimaged overvoltage relax toward accurate values.  If prev_Q1 is
+        # nonconvergent (i.e. oscillating wildly) on a dataset, perhaps due to a
+        # sampling rate that's slower than the RC time constants in the EC, then
+        # subsampling and/or a few steps of a Newton-Raphson method might be
+        # sufficient to estimate convergent values for the polarisation
+        # currents.
+      }
 
       DEBUG = T
       if ((DEBUG && any(abs(iv1_prime) > 100)) ||
@@ -772,11 +804,11 @@ predict_temp <- function(tmodel = NULL,
         # perhaps worthy of an immediate investigation.
         # n.b. a few segments from eNV50kWh are snapshotted for inspection
         diagt <- tibble(ia, iv,
-                        ocv, ocv_prime, overvoltage,
+                        ocv, ocv_prime, ocv_delta, overvoltage,
                         iv1, iv1_prime, iv2, iv2_prime,
                         iac, iac_prime,
-                        iap, iap_prime, ia2, ia2_prime,
-                        Q1, Q2,
+                        iap, iap_prime, ia2, ia2_prime, impulse_a,
+                        Q1, Q2, impulse_q, impulse_q2,
                         reff, r1, rp, r2,
                         ep1, ep2, ep3)
         write.csv(diagt, paste0("seg", i, ".", iternum, ".csv"))
@@ -831,6 +863,7 @@ predict_temp <- function(tmodel = NULL,
         # identified currents? Maybe the short time constant of
         # est_polarisation_amperage_2 response to a shift in pack voltage makes
         # its first derivative tricky to estimate in an unbiased way?
+        # TODO: consider adding a variance correction, derived from delta_Q
 
         est_heating_rp =
           delta_t *
@@ -842,6 +875,12 @@ predict_temp <- function(tmodel = NULL,
           delta_t *
           est_polarisation_amperage_2 * est_polarisation_amperage_2 *
           r2_tc / 1000,
+        # TODO: consider explicitly subsampling iv2 and ia2, to estimate
+        # heating from current flows which fluctuate at a frequency higher
+        # than the sampling rate.  Alternatively: estimate the RMS of ia2.
+        # In est_heating_r2, we are squaring a mean current (averaged over
+        # a sampling interval), thereby underestimating the mean of the squared
+        # current.
 
         est_soc = f_ocv_to_soc(est_ocv_from_pack_behaviour),
         # This may shed light on the apparently-wonky estimation of soc

@@ -303,7 +303,7 @@ revise_ocv <- function(m,
 
   ot <- if (methodology == "isoreg") newt3 else
     if (methodology == "cir") newt5 else newt4
-  m$parameters$ocv_tbl <- add_dvdj_to_ocv_tbl(ot)
+  m$parameters$ocv_tbl <- add_dvdq_to_ocv_tbl(ot)
 
   # retval: a thmodel with recomputed predictions
   predict_temp(m, trace = trace)
