@@ -161,7 +161,7 @@ default_params <- function(m,
                        heat_capacity =
                          ifelse(m$capacity == 24, 210, 234),
                        entropic_heat =
-                         ifelse(m$capacity == 24, -6, -6),
+                         ifelse(m$capacity == 24, -5.75, -11),
                        lambda_module_to_ambient =
                          ifelse(m$capacity == 24, 7.5, 7.5),
                        lambda_module_AC_to_ambient =
@@ -170,17 +170,17 @@ default_params <- function(m,
                          ifelse(m$model == "e-NV200", 300, 0),
                        COP = ifelse(m$model == "e-NV200", 2.9, 0),
                        effective_pack_resistance =
-                         ifelse(m$capacity == 24, 180, 60),
+                         ifelse(m$capacity == 24, 179, 53),
                        polarisation_Rp =
-                         ifelse(m$capacity == 24, 20, 20),
+                         ifelse(m$capacity == 24, 18.8, 13),
                        polarisation_R2 =
-                         ifelse(m$capacity == 24, 20, 20),
+                         ifelse(m$capacity == 24, 29.3, 37),
                        arrhenius_R2 =
                          ifelse(m$capacity == 24, -3500, -3500),
                        lambda1_polarisation =
                          ifelse(m$capacity == 24, 120, 120),
                        lambda2_polarisation =
-                         ifelse(m$capacity == 24, 20, 20),
+                         ifelse(m$capacity == 24, 30, 30),
                        gids_reserve =
                          ifelse(m$capacity == 24, 40, 62.5),
                        ocv_tbl =

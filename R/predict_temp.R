@@ -34,6 +34,7 @@
 #' @param gids_reserve dimensionless, gids available at lSOC == 0
 #' @param ocv_tbl maps lSOC or est_soc onto OCV, a 2-column tibble
 #' @param ocv_relax may be increased, at risk of divergence
+#' @param polarisation_adj tweak the estimate of the polarising impulses
 #' @param iter_count may be increased for a more accurate prediction
 #' @param min_segment_length shorter sequences of samples are ignored
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose, 3 with a scatterplot
@@ -69,6 +70,7 @@ predict_temp <- function(tmodel = NULL,
                          ocv_tbl = NULL,
                          ocv_relax = 1, # affects ep3 for OCV estimation
                          iter_count = 4,
+                         polarisation_adj = 0.85,
                          min_segment_length = 20,
                          trace = 2,
                          logfilnm = "log26Jan2026.csv",
@@ -211,6 +213,7 @@ predict_temp <- function(tmodel = NULL,
                ", aR = ", round(arrhenius_resistance, 5),
                ", aR2 = ", round(arrhenius_R2, 5),
                ", gr = ", gids_reserve,
+               ", padj = ", polarisation_adj,
                "\n"))
   }
 
@@ -310,15 +313,14 @@ predict_temp <- function(tmodel = NULL,
     )
 
   # The slope m of pack_amps, when integrated across the unit interval, adds
-  # (m^2 / 2)R to the estimated Joule heating. I estimate the slope at the
+  # (m^2/2)R to the estimated Joule heating. I estimate the slope at the
   # midpoint of each sampling interval using a first-order forward divided
   # difference.  This is NA at the end of each segment, which I adjust to 0 for
   # convenience when applying this additive correction to a numeric integration.
   # n.b. delta_t is NA in cases where sampling has been interrupted (as
-  # indicated by a long interval between timestamps).  The data is noisy
-  # enough, and its apparent slope is variable enough, that higher-order
-  # estimates of slope seem very unlikely to reduce bias without greatly
-  # degrading the accuracy of my numerical integration of Joule heating.
+  # indicated by a long interval between timestamps).  Additional accuracy
+  # *might* be obtained with a symmetric divided difference
+  # (sym_slope_pack_amps) and an estimate of the second derivative of pack_amps.
   logtibble <- logtibble |>
     mutate(
       slope_amps = dplyr::lead(pack_amps) - pack_amps,
@@ -423,13 +425,12 @@ predict_temp <- function(tmodel = NULL,
   kWh_reserve <- gids_reserve * 0.080
   SOC_reserve <- kWh_reserve / m$capacity
   SOC_usable <- 1 - SOC_reserve
+
   logtibble <- logtibble |>
     group_by(segnum) |>
     mutate(
-      lSOC = soc / 1e6, # scale this 20-bit integer to a 0-1 range
-      delta_Q = (lSOC - lag(lSOC, default = first(lSOC))) *
-        (a_hr / 10000) *
-        3600, # delta of pack charge, in coulombs
+      lSOC = soc / 1e6,
+      # scale this 20-bit integer to a 0-1 range
 
       est_lSOC = SOC_reserve +
         SOC_usable * gids * 0.080 / (m$capacity * soh / 100),
@@ -478,29 +479,21 @@ predict_temp <- function(tmodel = NULL,
       # at the start of each predictive segment.
 
       # est_ocv_from_pack_behaviour = pack_volts + cumsum(est_ocv_delta),
-      # an alternative estimate, but relies heavily on a numerical
-      # integration of f_ocv_to_dvdq() and is heavily biased by
-      # the starting pack_volts in each segment.
+      # an alternative estimate, but relies heavily on a numerical integration
+      # of f_ocv_to_dvdq() and is heavily biased by the starting pack_volts in
+      # each segment.
 
-      # n.b. we rely on lSOC only to estimate the delta in OCV from coulombic
-      # changes in the pack.  These deltas vary with ocv, and we use a lookup
-      # table to estimate them. The values in the lookup table may be updated
-      # using revise_ocv(m), where m is a thmodel with good estimations of
-      # polarisation currents.  Our initial estimate of ocv is based on a
-      # counterfactual assumption of there being no polarisation currents.
+      est_Joule_heating_amperage = pack_amps,
+      # n.b. This sampled data includes ripples from the polarisation currents
+      # which haven't yet been estimated.
 
-      est_Joule_heating_amperage = delta_Q / sampling_interval,
-      # TODO: estimate the RMS of the charging current.  This is its mean,
-      # with ripples from the polarisation currents (which haven't yet
-      # been estimated).
-
-      # for an equivalent circuit (R1-(Rp//C1))//(R2-C2) ...
+      # for an equivalent circuit (R1-(Rp//C1))//(R2-C2)
       est_polarisation_amperage_p = 0,
       # current attributed to a discharge or charge of C1
       est_polarisation_amperage_2 = 0,
       # current attributed to a discharge or charge of C2
       est_voltage_C1 =
-        - pack_amps * polarisation_Rp / effective_pack_resistance,
+        -pack_amps * polarisation_Rp / effective_pack_resistance,
       # voltage drop across C1, assuming no polarisation current
 
       # n.b. currents which charge the pack are negative, by Nissan convention
@@ -557,6 +550,10 @@ predict_temp <- function(tmodel = NULL,
     logtibble <- logtibble |>
       group_by(segnum) |>
       mutate(
+        delta_Q = (lSOC - lag(lSOC, default = first(lSOC))) *
+          (a_hr / 10000) *
+          3600, # delta of pack charge, in coulombs
+
         arr_factor =
           exp(arrhenius_resistance *
                 (1 / 298.15 - 1 / (first(pred_pack_avg_temp) + 273.15))) /
@@ -580,7 +577,7 @@ predict_temp <- function(tmodel = NULL,
         r1_tc = eff_packr_tc - rp_tc,
 
         l1_tc = arr_factor * lambda1_polarisation,
-        ep1_tc = min(1.0, sampling_interval / l1_tc),
+        ep1_tc = min(1.0, delta_t / l1_tc),
         # recomputed for each iteration, shifting as the pack temp evolves
 
         arr_factor2 =
@@ -596,25 +593,34 @@ predict_temp <- function(tmodel = NULL,
         # the timing of pack heating by a matter of seconds.
 
         l2_tc = arr_factor2 * lambda2_polarisation,
-        ep2_tc = min(1.0, sampling_interval / l2_tc),
+        ep2_tc = min(1.0, delta_t / l2_tc),
         # n.b. the effective resistance for lambda2_polarisation is r2
 
         delta_pack_amps = pack_amps -
-          lag(pack_amps, default = first(pack_amps)),
-        est_slope_pack_amps = (lead(pack_amps, default = last(pack_amps)) -
-          lag(pack_amps, default = first(pack_amps))) / 2,
-        # n.b. this estimate of the slope is unbiased by the second derivative
-        # of the sampled function
+          dplyr::lag(pack_amps, default = first(pack_amps)),
 
-        impulse_a = - (delta_Q / sampling_interval +
-                         pack_amps +
-                         est_slope_pack_amps / 2),
-        # charging amperage "between samples" i.e. the delta_Q unexplained by a
-        # numerical integration of the pack_amps timeseries (incl. a
-        # slope-correction).  impulse_a / 3 is thus an estimate of the second
-        # derivative of the pack_amps signal (with a timebase of
-        # sampling_interval), although it may well be too noisy to be useful in
-        # variance reduction of the predicted Joule heat.
+        mean_pack_amps = (
+          pack_amps + dplyr::lag(pack_amps, default = first(pack_amps))
+          ) / 2,
+        lag_delta_t = dplyr::lag(delta_t, default = NA),
+        lead_delta_t = dplyr::lead(delta_t, default = NA),
+        sym_slope_pack_amps =
+          (dplyr::lead(pack_amps, default = last(pack_amps)) -
+           dplyr::lag(pack_amps, default = first(pack_amps))) /
+          (lead_delta_t + lag_delta_t),
+        # n.b. this estimate of the slope is unbiased by the second derivative
+        # of the sampled function *if* the sampling interval is constant --
+        # an assumption which is often violated esp. when the sampling interval
+        # is 8 seconds (as in segments 803 and 804 of eNV50kWh.rda)
+
+        impulse_a = 0,
+        #  - polarisation_adj * delta_Q / delta_t - mean_pack_amps,
+        # the impulse is absorbed primarily by C2 and C1.  delta_Q is from lSOC
+        # but is scaled strangely.
+        impulse_a = if_else(is.na(impulse_a), 0, impulse_a),
+        # n.b. zero impulse current at the start of a segment
+        impulse_q = impulse_a * delta_t,
+        impulse_q = if_else(is.na(impulse_q), 0, impulse_q),
 
         .before = pack_avg_temp
       ) |>
@@ -624,13 +630,13 @@ predict_temp <- function(tmodel = NULL,
       ia <- logtibble$pack_amps[wstart[i]:wend[i]] # instantaneous amperage
       iv <- logtibble$pack_volts[wstart[i]:wend[i]] # instantaneous voltage
 
-      si <- logtibble$sampling_interval[wstart[i]] # sampling interval, in s
+      si <- logtibble$sampling_interval[wstart[i]] # mean sampling interval
       dq <- logtibble$delta_Q[wstart[i]:wend[i]] # delta of pack-charge, in As
       dpa <- logtibble$delta_pack_amps[wstart[i]:wend[i]]
 
       impulse_a <- logtibble$impulse_a[wstart[i]:wend[i]]
-      impulse_q <- - impulse_a * si
-      # C2 charge attributed to unsampled spikes or valleys in pack_amps
+      # current attributed to unsampled spikes or valleys in pack_amps
+      impulse_q <- - logtibble$impulse_q[wstart[i]:wend[i]]
 
       reff <- logtibble$eff_packr_tc[wstart[i]:wend[i]] / 1000
       r1 <- logtibble$r1_tc[wstart[i]:wend[i]] / 1000
@@ -715,7 +721,7 @@ predict_temp <- function(tmodel = NULL,
         # the high-frequency impulse_q
         prev_ia2 <- ia2_prime[j] <- - delta_iv2 / r2[j] - impulse_q2[j] / si
         # n.b. negative (Nissan-convention) currents, inverting Ohm's Law
-      }
+        }
       # TODO: consider replacing the scalar loop above with a call to the
       # C-coded stats::filter(), for decreased runtime at the cost of
       # accuracy in cases where the temperature-adjusted resistance r2 varies
@@ -798,17 +804,25 @@ predict_temp <- function(tmodel = NULL,
       if ((DEBUG && any(abs(iv1_prime) > 100)) ||
           (DEBUG && any(abs(iv2_prime - ocv_prime) > 100)) ||
           ((tmodel$name == "eNV50kWh") &&
-           ((i == 803) || (i == 672) || (i == 913)))) {
+           ((i == 10) || (i == 672) || (i == 913)))) {
         # n.b. excessive violations of Kirchhoff's First Law, or an excessive
         # voltage on C1 or C2, are indicative of a highly-inaccurate simulation,
         # perhaps worthy of an immediate investigation.
         # n.b. a few segments from eNV50kWh are snapshotted for inspection
+
+        dt <- logtibble$delta_t[wstart[i]:wend[i]]
+        ls <- logtibble$lSOC[wstart[i]:wend[i]]
+        eod <- logtibble$est_ocv_delta[wstart[i]:wend[i]]
+        pat <- logtibble$pack_avg_temp[wstart[i]:wend[i]]
+        ppat <- logtibble$pred_pack_avg_temp[wstart[i]:wend[i]]
         diagt <- tibble(ia, iv,
                         ocv, ocv_prime, ocv_delta, overvoltage,
                         iv1, iv1_prime, iv2, iv2_prime,
                         iac, iac_prime,
-                        iap, iap_prime, ia2, ia2_prime, impulse_a,
-                        Q1, Q2, impulse_q, impulse_q2,
+                        iap, iap_prime, ia2, ia2_prime,
+#                        impulse_a, impulse_q, impulse_q2,
+                        Q1, Q2,
+                        dt, ls, eod, pat, ppat,
                         reff, r1, rp, r2,
                         ep1, ep2, ep3)
         write.csv(diagt, paste0("seg", i, ".", iternum, ".csv"))
@@ -831,6 +845,7 @@ predict_temp <- function(tmodel = NULL,
       logtibble$est_voltage_C2[wstart[i]:wend[i]] <- iv2_prime
       # estimated voltages across C1 (resp. C2), for debugging
     }
+
 
     # TODO: consider transmogrifying the code above into the tidyverse. DONE:
     # Not a good idea.  Estimated cost: 1 SMOP.  Estimated ROI: negative. It's
@@ -867,8 +882,8 @@ predict_temp <- function(tmodel = NULL,
 
         est_heating_rp =
           delta_t *
-          (est_Joule_heating_amperage - est_polarisation_amperage_1) *
-          (est_Joule_heating_amperage - est_polarisation_amperage_1) *
+          (est_Joule_heating_amperage - est_polarisation_amperage_p) *
+          (est_Joule_heating_amperage - est_polarisation_amperage_p) *
           rp_tc / 1000,
 
         est_heating_r2 =
@@ -971,13 +986,13 @@ predict_temp <- function(tmodel = NULL,
     # $x_t = x_{t-1}(1-\lambda) + h_t + a_t \lambda$ where $x_t$ is the pack
     # temperature, $h_t$ is the heatflow into the cells (in K), $a_t$ is the
     # ambient temperature, and $\lambda$ is the time constant for heatflow from
-    # module to ambient (in units of the sampling_interval, rather than seconds
+    # module to ambient (in units of the sampling interval, rather than seconds
     # or hours).
     for (i in seq(nsegments)[which(!segexclude)]) {
 
 #    lambda <- EMA_param[[wstart[i]]] # per-segment!
      # if lambda were constant over a segment, stats::filter() would be
-     # elegant and efficiently-executed on any superscalar CPU:
+     # elegant and efficiently-executed on any superscalar CPU, e.g.
 #    pred_temp[wstart[i]:wend[i]] <- stats::filter(
 #       impulse_heat[wstart[i]:wend[i]],
 #       filter = c(1 - lambda),
