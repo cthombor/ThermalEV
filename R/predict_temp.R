@@ -34,7 +34,6 @@
 #' @param gids_reserve dimensionless, gids available at lSOC == 0
 #' @param ocv_tbl maps lSOC or est_soc onto OCV, a 2-column tibble
 #' @param ocv_relax may be increased, at risk of divergence
-#' @param polarisation_adj tweak the estimate of the polarising impulses
 #' @param iter_count may be increased for a more accurate prediction
 #' @param min_segment_length shorter sequences of samples are ignored
 #' @param trace 0 for silent, 1 for minimal, 2 for verbose, 3 with a scatterplot
@@ -70,7 +69,6 @@ predict_temp <- function(tmodel = NULL,
                          ocv_tbl = NULL,
                          ocv_relax = 1, # affects ep3 for OCV estimation
                          iter_count = 4,
-                         polarisation_adj = 0.85,
                          min_segment_length = 20,
                          trace = 2,
                          logfilnm = "log26Jan2026.csv",
@@ -206,14 +204,13 @@ predict_temp <- function(tmodel = NULL,
                ", R2 = ", round(polarisation_R2, 5),
                ", λp = ", round(lambda_module_to_ambient, 5), # passive cooling
                ", λa = ", round(lambda_module_AC_to_ambient, 5), # active A/C
-               ",\n λt1 = ", round(lambda1_polarisation, 5), # RpC1 time-constant
+               ",\n λt1 = ", round(lambda1_polarisation, 5),# RpC1 time-constant
                ", λt2 = ", round(lambda2_polarisation, 5), # R2C2 time-constant
                ", fanp = ", round(fan_power, 5),
                ", COP = ", round(COP, 5),
                ", aR = ", round(arrhenius_resistance, 5),
                ", aR2 = ", round(arrhenius_R2, 5),
                ", gr = ", gids_reserve,
-               ", padj = ", polarisation_adj,
                "\n"))
   }
 
@@ -613,10 +610,16 @@ predict_temp <- function(tmodel = NULL,
         # an assumption which is often violated esp. when the sampling interval
         # is 8 seconds (as in segments 803 and 804 of eNV50kWh.rda)
 
-        impulse_a = 0,
-        #  - polarisation_adj * delta_Q / delta_t - mean_pack_amps,
-        # the impulse is absorbed primarily by C2 and C1.  delta_Q is from lSOC
-        # but is scaled strangely.
+        impulse_a = (pack_volts - est_ocv_from_pack_behaviour) / eff_packr_tc -
+          pack_amps,
+        # n.b. pack_volts responds immediately to changes in load, with impulses
+        # causing polarisation currents which are buffered in the RC network of
+        # our equivalent circuit.  At steady-state, there are no polarisation
+        # currents and pack_amps is the overvoltage divided by the effective
+        # pack resistance.  We estimate the OCV from the pack's behaviour (as
+        # modelled in our EC), rather than from lSOC (which has an obscure
+        # scaling, as well as being subject to inaccuracies of roughly 10% which
+        # are occasionally corrected).
         impulse_a = if_else(is.na(impulse_a), 0, impulse_a),
         # n.b. zero impulse current at the start of a segment
         impulse_q = impulse_a * delta_t,
